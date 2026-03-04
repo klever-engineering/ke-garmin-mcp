@@ -1,0 +1,27 @@
+[project]
+name = "garmin-mcp"
+version = "0.1.0"
+description = "Local Garmin Connect phase-1 connector (sleep, workouts, daily metrics)."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "garminconnect==0.2.38",
+  "mcp==1.26.0",
+  "python-dotenv==1.2.2",
+  "typer==0.24.1",
+]
+
+[project.scripts]
+"lifeos.garmin-cli" = "garmin_mcp.cli:main"
+"lifeos.garmin-mcp" = "garmin_mcp.mcp_server:main"
+
+[build-system]
+requires = ["setuptools>=80.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+

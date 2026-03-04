@@ -1,0 +1,17 @@
+services:
+  garmin-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: lifeos.garmin-mcp:local
+    stdin_open: true
+    tty: false
+    env_file:
+      - .env
+    environment:
+      GARMIN_TOKENS_DIR: /data/garmin-tokens
+      GARMIN_MAX_RANGE_DAYS: 93
+    volumes:
+      - ./.state:/data
+    command: ["--transport", "stdio"]
+

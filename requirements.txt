@@ -1,0 +1,5 @@
+garminconnect==0.2.38
+mcp==1.26.0
+python-dotenv==1.2.2
+typer==0.24.1
+
