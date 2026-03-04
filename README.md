@@ -17,14 +17,14 @@ Note: `garminconnect` currently constrains `garth` to `<0.6.0`. Resolver will in
 ## Bootstrap (local)
 
 ```bash
-cd repositories/garmin-mcp
+cd repositories/mcps/garmin-mcp
 ./scripts/bootstrap.sh
 ```
 
 ## Environment
 
 The runtime loads `.env` from:
-1. `repositories/garmin-mcp/.env` (if present)
+1. `repositories/mcps/garmin-mcp/.env` (if present)
 2. workspace root `.env` (`../../.env`) via `scripts/mcp_stdio.sh`
 
 Required:
@@ -104,4 +104,3 @@ docker compose run --rm garmin-mcp
 - Keep `.env` and `.state/` out of git.
 - Token files are sensitive and should remain local.
 - Do not store credentials in IDE MCP config; keep them in `.env`.
-
