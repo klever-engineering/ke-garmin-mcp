@@ -17,7 +17,11 @@ from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.export import (
+    BatchSpanProcessor,
+    ConsoleSpanExporter,
+    SimpleSpanProcessor,
+)
 
 from .client import (
     GarminAuthError,
@@ -63,8 +67,11 @@ def _init_tracing(service_name: str):
             }
         )
         provider = TracerProvider(resource=resource)
-        exporter = OTLPSpanExporter(endpoint=endpoint) if endpoint else OTLPSpanExporter()
-        provider.add_span_processor(BatchSpanProcessor(exporter))
+        if os.getenv("LIFEOS_OTEL_DISABLE_OTLP", "0") != "1":
+            exporter = OTLPSpanExporter(endpoint=endpoint) if endpoint else OTLPSpanExporter()
+            provider.add_span_processor(BatchSpanProcessor(exporter))
+        if os.getenv("LIFEOS_OTEL_CONSOLE", "0") == "1":
+            provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
         trace.set_tracer_provider(provider)
         return trace.get_tracer(service_name)
     except Exception:
@@ -78,6 +85,26 @@ def _span(name: str):
     if _TRACER is None:
         return nullcontext()
     return _TRACER.start_as_current_span(name)
+
+
+def _set_span_attrs(**attrs: Any) -> None:
+    span = trace.get_current_span()
+    if not span or not span.is_recording():
+        return
+    for key, value in attrs.items():
+        if value is None:
+            continue
+        if isinstance(value, bool | int | float | str):
+            span.set_attribute(key, value)
+        else:
+            span.set_attribute(key, str(value))
+
+
+def tracing_probe() -> dict[str, Any]:
+    """Emit a safe local span without external API calls."""
+    with _span("garmin_tracing_probe"):
+        _set_span_attrs(operation="tracing_probe", module="garmin_mcp")
+        return {"ok": True, "module": "garmin_mcp"}
 
 
 def _get_api():
@@ -105,6 +132,10 @@ def _handle_known_errors(exc: Exception) -> dict[str, Any]:
 def garmin_get_day_overview(target_date: str = date.today().isoformat()) -> dict[str, Any]:
     with _span("garmin_get_day_overview"):
         try:
+            _set_span_attrs(
+                operation="garmin_get_day_overview",
+                target_date=target_date,
+            )
             settings, api = _get_api()
             _ = settings
             parsed_date = parse_date(target_date)
@@ -136,6 +167,12 @@ def garmin_list_activities(
 ) -> dict[str, Any]:
     with _span("garmin_list_activities"):
         try:
+            _set_span_attrs(
+                operation="garmin_list_activities",
+                start_date=start_date,
+                end_date=end_date,
+                activity_type=activity_type,
+            )
             settings, api = _get_api()
             start, end = validate_date_range(
                 start_date, end_date, max_days=settings.max_range_days
@@ -167,6 +204,12 @@ def garmin_get_sleep_range(
 ) -> dict[str, Any]:
     with _span("garmin_get_sleep_range"):
         try:
+            _set_span_attrs(
+                operation="garmin_get_sleep_range",
+                start_date=start_date,
+                end_date=end_date,
+                include_empty=include_empty,
+            )
             settings, api = _get_api()
             start, end = validate_date_range(
                 start_date, end_date, max_days=settings.max_range_days
