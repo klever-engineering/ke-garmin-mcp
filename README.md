@@ -45,6 +45,7 @@ PYTHONPATH=src python -m garmin_mcp.cli today
 PYTHONPATH=src python -m garmin_mcp.cli day --date 2026-03-03
 PYTHONPATH=src python -m garmin_mcp.cli activities --start-date 2026-02-01 --end-date 2026-02-28
 PYTHONPATH=src python -m garmin_mcp.cli sleep-range --start-date 2026-02-01 --end-date 2026-03-03
+PYTHONPATH=src python -m garmin_mcp.cli calories --start-date 2026-02-01 --end-date 2026-02-28
 ```
 
 Installed script names (namespaced):

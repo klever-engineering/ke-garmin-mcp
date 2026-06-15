@@ -18,6 +18,18 @@ class DaySnapshot:
 
 
 @dataclass(slots=True)
+class CaloriesDay:
+    calendar_date: str
+    total_kilocalories: int | None
+    active_kilocalories: int | None
+    bmr_kilocalories: int | None
+    wellness_kilocalories: int | None
+    consumed_kilocalories: int | None
+    remaining_kilocalories: int | None
+    source_payload: dict[str, Any]
+
+
+@dataclass(slots=True)
 class SleepNight:
     calendar_date: str
     sleep_time_seconds: int | None
@@ -106,6 +118,77 @@ def compact_sleep_dto(payload: dict[str, Any]) -> dict[str, Any]:
         "light_sleep_seconds": dto.get("lightSleepSeconds"),
         "rem_sleep_seconds": dto.get("remSleepSeconds"),
         "awake_sleep_seconds": dto.get("awakeSleepSeconds"),
+    }
+
+
+def _coerce_kcal(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    return None
+
+
+def compact_calories(summary: dict[str, Any] | None) -> dict[str, Any]:
+    summary = summary if isinstance(summary, dict) else {}
+    return {
+        "calendar_date": summary.get("calendarDate"),
+        "total_kilocalories": _coerce_kcal(summary.get("totalKilocalories")),
+        "active_kilocalories": _coerce_kcal(summary.get("activeKilocalories")),
+        "bmr_kilocalories": _coerce_kcal(summary.get("bmrKilocalories")),
+        "wellness_kilocalories": _coerce_kcal(summary.get("wellnessKilocalories")),
+        "consumed_kilocalories": _coerce_kcal(summary.get("consumedKilocalories")),
+        "remaining_kilocalories": _coerce_kcal(summary.get("remainingKilocalories")),
+    }
+
+
+def fetch_calories_range(api: Garmin, start: date, end: date) -> list[CaloriesDay]:
+    rows: list[CaloriesDay] = []
+    cursor = start
+    while cursor <= end:
+        day = cursor.isoformat()
+        summary = api.get_user_summary(day)
+        summary_dict = summary if isinstance(summary, dict) else {}
+        compact = compact_calories(summary_dict)
+        rows.append(
+            CaloriesDay(
+                calendar_date=day,
+                total_kilocalories=compact["total_kilocalories"],
+                active_kilocalories=compact["active_kilocalories"],
+                bmr_kilocalories=compact["bmr_kilocalories"],
+                wellness_kilocalories=compact["wellness_kilocalories"],
+                consumed_kilocalories=compact["consumed_kilocalories"],
+                remaining_kilocalories=compact["remaining_kilocalories"],
+                source_payload=summary_dict,
+            )
+        )
+        cursor += timedelta(days=1)
+    return rows
+
+
+def summarize_calories(rows: list[CaloriesDay]) -> dict[str, Any]:
+    tracked = [row for row in rows if row.total_kilocalories or row.active_kilocalories]
+    if not tracked:
+        return {
+            "tracked_days": 0,
+            "total_active_kilocalories": 0,
+            "total_burned_kilocalories": 0,
+            "average_active_kilocalories": None,
+            "average_total_kilocalories": None,
+        }
+
+    active_values = [row.active_kilocalories for row in tracked if row.active_kilocalories is not None]
+    total_values = [row.total_kilocalories for row in tracked if row.total_kilocalories is not None]
+    return {
+        "tracked_days": len(tracked),
+        "total_active_kilocalories": sum(active_values),
+        "total_burned_kilocalories": sum(total_values),
+        "average_active_kilocalories": (
+            int(sum(active_values) / len(active_values)) if active_values else None
+        ),
+        "average_total_kilocalories": (
+            int(sum(total_values) / len(total_values)) if total_values else None
+        ),
     }
 
 

@@ -9,12 +9,15 @@ import typer
 from .client import (
     GarminAuthError,
     compact_activity,
+    compact_calories,
     compact_sleep_dto,
     fetch_activities_range,
+    fetch_calories_range,
     fetch_day_snapshot,
     fetch_sleep_range,
     login,
     parse_date,
+    summarize_calories,
     summarize_sleep,
     validate_date_range,
 )
@@ -87,6 +90,7 @@ def day_command(
                 "active_kilocalories": snapshot.summary.get("activeKilocalories"),
                 "resting_heart_rate": snapshot.summary.get("restingHeartRate"),
             },
+            "calories": compact_calories(snapshot.summary),
             "sleep": compact_sleep_dto(snapshot.sleep),
             "workouts": [compact_activity(activity) for activity in snapshot.activities],
         }
@@ -165,6 +169,49 @@ def sleep_range_command(
             "start_date": start.isoformat(),
             "end_date": end.isoformat(),
             "summary": summarize_sleep(rows),
+            "rows": output_rows,
+        }
+    )
+
+
+@app.command("calories")
+def calories_command(
+    start_date: str = typer.Option(..., "--start-date", help="YYYY-MM-DD"),
+    end_date: str = typer.Option(..., "--end-date", help="YYYY-MM-DD"),
+    include_empty: bool = typer.Option(
+        False,
+        "--include-empty",
+        help="Include days without tracked calorie data.",
+    ),
+) -> None:
+    """Get daily calories burned/consumed and a summary for a date range."""
+    settings = load_settings()
+    start, end = validate_date_range(start_date, end_date, max_days=settings.max_range_days)
+    api = login(settings, force_credentials=False)
+    rows = fetch_calories_range(api, start, end)
+
+    output_rows = []
+    for row in rows:
+        has_data = bool(row.total_kilocalories or row.active_kilocalories)
+        if not include_empty and not has_data:
+            continue
+        output_rows.append(
+            {
+                "calendar_date": row.calendar_date,
+                "total_kilocalories": row.total_kilocalories,
+                "active_kilocalories": row.active_kilocalories,
+                "bmr_kilocalories": row.bmr_kilocalories,
+                "wellness_kilocalories": row.wellness_kilocalories,
+                "consumed_kilocalories": row.consumed_kilocalories,
+                "remaining_kilocalories": row.remaining_kilocalories,
+            }
+        )
+
+    _print_json(
+        {
+            "start_date": start.isoformat(),
+            "end_date": end.isoformat(),
+            "summary": summarize_calories(rows),
             "rows": output_rows,
         }
     )

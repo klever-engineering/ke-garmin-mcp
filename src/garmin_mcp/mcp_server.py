@@ -26,12 +26,15 @@ from opentelemetry.sdk.trace.export import (
 from .client import (
     GarminAuthError,
     compact_activity,
+    compact_calories,
     compact_sleep_dto,
     fetch_activities_range,
+    fetch_calories_range,
     fetch_day_snapshot,
     fetch_sleep_range,
     login,
     parse_date,
+    summarize_calories,
     summarize_sleep,
     validate_date_range,
 )
@@ -149,6 +152,7 @@ def garmin_get_day_overview(target_date: str = date.today().isoformat()) -> dict
                     "active_kilocalories": snapshot.summary.get("activeKilocalories"),
                     "resting_heart_rate": snapshot.summary.get("restingHeartRate"),
                 },
+                "calories": compact_calories(snapshot.summary),
                 "sleep": compact_sleep_dto(snapshot.sleep),
                 "workouts": [compact_activity(activity) for activity in snapshot.activities],
             }
@@ -239,6 +243,59 @@ def garmin_get_sleep_range(
                 "start_date": start.isoformat(),
                 "end_date": end.isoformat(),
                 "summary": summarize_sleep(rows),
+                "rows": table,
+            }
+        except Exception as exc:
+            return _handle_known_errors(exc)
+
+
+@mcp.tool(
+    name="garmin_get_calories",
+    description=(
+        "Get daily calories burned (active, BMR, total) and consumed/remaining "
+        "for a date range, with aggregate totals and averages."
+    ),
+)
+def garmin_get_calories(
+    start_date: str,
+    end_date: str,
+    include_empty: bool = False,
+) -> dict[str, Any]:
+    with _span("garmin_get_calories"):
+        try:
+            _set_span_attrs(
+                operation="garmin_get_calories",
+                start_date=start_date,
+                end_date=end_date,
+                include_empty=include_empty,
+            )
+            settings, api = _get_api()
+            start, end = validate_date_range(
+                start_date, end_date, max_days=settings.max_range_days
+            )
+            rows = fetch_calories_range(api, start, end)
+            table: list[dict[str, Any]] = []
+            for row in rows:
+                has_data = bool(row.total_kilocalories or row.active_kilocalories)
+                if not include_empty and not has_data:
+                    continue
+                table.append(
+                    {
+                        "calendar_date": row.calendar_date,
+                        "total_kilocalories": row.total_kilocalories,
+                        "active_kilocalories": row.active_kilocalories,
+                        "bmr_kilocalories": row.bmr_kilocalories,
+                        "wellness_kilocalories": row.wellness_kilocalories,
+                        "consumed_kilocalories": row.consumed_kilocalories,
+                        "remaining_kilocalories": row.remaining_kilocalories,
+                    }
+                )
+
+            return {
+                "ok": True,
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+                "summary": summarize_calories(rows),
                 "rows": table,
             }
         except Exception as exc:
