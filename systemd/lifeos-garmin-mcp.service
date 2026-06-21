@@ -1,0 +1,15 @@
+[Unit]
+Description=LifeOS Garmin MCP Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/media/alian/DATA/Projects/life/repositories/mcps/garmin-mcp
+ExecStart=/media/alian/DATA/Projects/life/repositories/mcps/garmin-mcp/scripts/mcp_streamable_http.sh
+Restart=always
+RestartSec=10
+UMask=0077
+
+[Install]
+WantedBy=default.target

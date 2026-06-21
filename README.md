@@ -63,6 +63,12 @@ Local stdio run:
 ./scripts/mcp_stdio.sh
 ```
 
+Local long-running HTTP MCP:
+
+```bash
+./scripts/mcp_streamable_http.sh
+```
+
 Direct Python run:
 
 ```bash
@@ -99,6 +105,39 @@ With Compose:
 docker compose build
 docker compose run --rm garmin-mcp
 ```
+
+## 24/7 user service
+
+Checked-in user unit:
+
+```bash
+systemd/lifeos-garmin-mcp.service
+```
+
+Install and enable:
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp systemd/lifeos-garmin-mcp.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now lifeos-garmin-mcp.service
+```
+
+Verification:
+
+```bash
+systemctl --user status lifeos-garmin-mcp.service --no-pager
+journalctl --user-unit lifeos-garmin-mcp.service -n 50 --no-pager
+curl -H 'Accept: text/event-stream' http://127.0.0.1:8000/mcp
+```
+
+Downstream use:
+
+- `repositories/tools/life-daily-report` now reads Garmin data from this
+  streamable HTTP service by default.
+- If the service is down, the daily report renders a Garmin source warning
+  instead of shelling into the Garmin CLI unless its source config is
+  intentionally switched back to `transport: "cli"`.
 
 ## Security Notes
 
