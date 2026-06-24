@@ -32,7 +32,7 @@ Required:
 - `GARMIN_PASSWORD`
 
 Optional:
-- `GARMIN_TOKENS_DIR` (default: `.state/garmin-tokens`)
+- `GARMIN_TOKENS_DIR` (default: `config/garmin-mcp/tokens`, resolved from the workspace root)
 - `GARMIN_MAX_RANGE_DAYS` (default: `93`)
 - `GARMIN_ENV_FILE` (explicit env file path)
 
@@ -94,8 +94,8 @@ Run stdio MCP:
 ```bash
 docker run -i --rm \
   --env-file .env \
-  -e GARMIN_TOKENS_DIR=/data/garmin-tokens \
-  -v "$(pwd)/.state:/data" \
+  -e GARMIN_TOKENS_DIR=/data/config/garmin-mcp/tokens \
+  -v "$(pwd)/../../../config:/data/config" \
   lifeos.garmin-mcp:local --transport stdio
 ```
 
@@ -142,5 +142,5 @@ Downstream use:
 ## Security Notes
 
 - Keep `.env` and `.state/` out of git.
-- Token files are sensitive and should remain local.
+- Token files are sensitive and should remain local under `config/garmin-mcp/tokens/`.
 - Do not store credentials in IDE MCP config; keep them in `.env`.

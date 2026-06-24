@@ -7,6 +7,21 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 
+def _workspace_root() -> Path:
+    current = Path(__file__).resolve()
+    for candidate in current.parents:
+        if (candidate / "config").is_dir() and (candidate / "repositories").is_dir():
+            return candidate
+    return Path.cwd().resolve()
+
+
+def _resolve_local_path(value: str) -> Path:
+    candidate = Path(value).expanduser()
+    if candidate.is_absolute():
+        return candidate
+    return _workspace_root() / candidate
+
+
 def _find_env_file() -> Path | None:
     explicit_env_file = os.getenv("GARMIN_ENV_FILE")
     if explicit_env_file:
@@ -41,7 +56,9 @@ class Settings:
 
 def load_settings() -> Settings:
     load_runtime_env()
-    tokens_dir = Path(os.getenv("GARMIN_TOKENS_DIR", ".state/garmin-tokens"))
+    tokens_dir = _resolve_local_path(
+        os.getenv("GARMIN_TOKENS_DIR", "config/garmin-mcp/tokens")
+    )
     max_range_days = int(os.getenv("GARMIN_MAX_RANGE_DAYS", "93"))
     return Settings(
         garmin_username=os.getenv("GARMIN_USERNAME"),
@@ -49,4 +66,3 @@ def load_settings() -> Settings:
         garmin_tokens_dir=tokens_dir,
         max_range_days=max_range_days,
     )
-

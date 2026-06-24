@@ -13,7 +13,7 @@ We want login-once behavior while keeping secrets out of source code and git.
   - `GARMIN_USERNAME`
   - `GARMIN_PASSWORD`
 - OAuth token files are persisted in a local directory configured by `GARMIN_TOKENS_DIR`.
-- Default token path is relative: `.state/garmin-tokens`.
+- Default token path is workspace-root relative: `config/garmin-mcp/tokens`.
 - Absolute paths are allowed only through environment variables (for example `GARMIN_ENV_FILE`).
 
 ## Consequences
@@ -28,4 +28,3 @@ We want login-once behavior while keeping secrets out of source code and git.
 ## Revisit Trigger
 
 Revisit when migrating to keyring/secret manager storage or enterprise auth controls.
-

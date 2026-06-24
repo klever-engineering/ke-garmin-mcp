@@ -16,5 +16,4 @@ docker-build:
 	docker build -t lifeos.garmin-mcp:local .
 
 docker-run:
-	docker run -i --rm --env-file .env -e GARMIN_TOKENS_DIR=/data/garmin-tokens -v "$(PWD)/.state:/data" lifeos.garmin-mcp:local --transport stdio
-
+	docker run -i --rm --env-file .env -e GARMIN_TOKENS_DIR=/data/config/garmin-mcp/tokens -v "$(PWD)/../../../config:/data/config" lifeos.garmin-mcp:local --transport stdio

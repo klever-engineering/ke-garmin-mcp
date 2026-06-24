@@ -21,7 +21,7 @@ if [[ -f "${WORKSPACE_DIR}/.env" ]]; then
 fi
 
 export PYTHONPATH="${PROJECT_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
-export GARMIN_TOKENS_DIR="${GARMIN_TOKENS_DIR:-.state/garmin-tokens}"
+export GARMIN_TOKENS_DIR="${GARMIN_TOKENS_DIR:-config/garmin-mcp/tokens}"
 export GARMIN_MAX_RANGE_DAYS="${GARMIN_MAX_RANGE_DAYS:-93}"
 export LIFEOS_OTEL_DISABLE_OTLP="${LIFEOS_OTEL_DISABLE_OTLP:-1}"
 
