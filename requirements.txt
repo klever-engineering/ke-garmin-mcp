@@ -4,5 +4,5 @@ opentelemetry-api==1.38.0
 opentelemetry-exporter-otlp-proto-http==1.38.0
 opentelemetry-sdk==1.38.0
 python-dotenv==1.2.2
-typer==0.24.1
+typer==0.27.0
 
