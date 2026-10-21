@@ -88,7 +88,7 @@ def login(settings: Settings, force_credentials: bool = False) -> Garmin:
 
 
 def compact_activity(activity: dict[str, Any]) -> dict[str, Any]:
-    return {
+    compact = {
         "activity_id": activity.get("activityId"),
         "name": activity.get("activityName"),
         "type": (activity.get("activityType") or {}).get("typeKey"),
@@ -98,6 +98,11 @@ def compact_activity(activity: dict[str, Any]) -> dict[str, Any]:
         "average_heart_rate": activity.get("averageHR"),
         "max_heart_rate": activity.get("maxHR"),
     }
+    # Garmin zone time is observed data, not an estimate. Retain None when the
+    # record omits a zone so consumers can distinguish missing from zero.
+    for zone in range(1, 6):
+        compact[f"heart_rate_zone_{zone}_seconds"] = activity.get(f"hrTimeInZone_{zone}")
+    return compact
 
 
 def _extract_sleep_dto(payload: dict[str, Any] | None) -> dict[str, Any]:
