@@ -35,13 +35,12 @@ from .client import (
     fetch_health_range,
     fetch_sleep_range,
     summarize_health_history,
-    login,
     parse_date,
     summarize_calories,
     summarize_sleep,
     validate_date_range,
 )
-from .config import load_settings
+from .session import GarminSession
 
 mcp = FastMCP(
     name="lifeos.garmin-mcp",
@@ -113,10 +112,23 @@ def tracing_probe() -> dict[str, Any]:
         return {"ok": True, "module": "garmin_mcp"}
 
 
+# One Garmin login per process; see session.py and README "Request budget".
+_SESSION = GarminSession()
+
+
 def _get_api():
-    settings = load_settings()
-    api = login(settings, force_credentials=False)
-    return settings, api
+    return _SESSION.get()
+
+
+def _with_garmin(operation):
+    """Run operation(settings, api); log in again once if Garmin rejects the session."""
+    settings, api = _get_api()
+    try:
+        return operation(settings, api)
+    except GarminConnectAuthenticationError:
+        _SESSION.reset()
+        settings, api = _get_api()
+        return operation(settings, api)
 
 
 def _handle_known_errors(exc: Exception) -> dict[str, Any]:
@@ -148,11 +160,13 @@ def garmin_get_day_overview(target_date: str = "") -> dict[str, Any]:
                 operation="garmin_get_day_overview",
                 target_date=target_date,
             )
-            settings, api = _get_api()
-            _ = settings
-            parsed_date = parse_date(target_date)
-            snapshot = fetch_day_snapshot(api, parsed_date)
-            return {"ok": True, **day_overview_payload(snapshot)}
+
+            def run(settings, api):
+                parsed_date = parse_date(target_date)
+                snapshot = fetch_day_snapshot(api, parsed_date)
+                return {"ok": True, **day_overview_payload(snapshot)}
+
+            return _with_garmin(run)
         except Exception as exc:
             return _handle_known_errors(exc)
 
@@ -174,20 +188,23 @@ def garmin_list_activities(
                 end_date=end_date,
                 activity_type=activity_type,
             )
-            settings, api = _get_api()
-            start, end = validate_date_range(
-                start_date, end_date, max_days=settings.max_range_days
-            )
-            activities = fetch_activities_range(
-                api, start, end, activity_type=activity_type.strip() or None
-            )
-            return {
-                "ok": True,
-                "start_date": start.isoformat(),
-                "end_date": end.isoformat(),
-                "count": len(activities),
-                "activities": [compact_activity(activity) for activity in activities],
-            }
+
+            def run(settings, api):
+                start, end = validate_date_range(
+                    start_date, end_date, max_days=settings.max_range_days
+                )
+                activities = fetch_activities_range(
+                    api, start, end, activity_type=activity_type.strip() or None
+                )
+                return {
+                    "ok": True,
+                    "start_date": start.isoformat(),
+                    "end_date": end.isoformat(),
+                    "count": len(activities),
+                    "activities": [compact_activity(activity) for activity in activities],
+                }
+
+            return _with_garmin(run)
         except Exception as exc:
             return _handle_known_errors(exc)
 
@@ -211,37 +228,40 @@ def garmin_get_sleep_range(
                 end_date=end_date,
                 include_empty=include_empty,
             )
-            settings, api = _get_api()
-            start, end = validate_date_range(
-                start_date, end_date, max_days=settings.max_range_days
-            )
-            rows = fetch_sleep_range(api, start, end)
-            table: list[dict[str, Any]] = []
-            for row in rows:
-                has_sleep = (
-                    isinstance(row.sleep_time_seconds, (int, float))
-                    and row.sleep_time_seconds > 0
-                )
-                if not include_empty and not has_sleep:
-                    continue
-                table.append(
-                    {
-                        "calendar_date": row.calendar_date,
-                        "sleep_time_seconds": row.sleep_time_seconds,
-                        "deep_sleep_seconds": row.deep_sleep_seconds,
-                        "light_sleep_seconds": row.light_sleep_seconds,
-                        "rem_sleep_seconds": row.rem_sleep_seconds,
-                        "awake_sleep_seconds": row.awake_sleep_seconds,
-                    }
-                )
 
-            return {
-                "ok": True,
-                "start_date": start.isoformat(),
-                "end_date": end.isoformat(),
-                "summary": summarize_sleep(rows),
-                "rows": table,
-            }
+            def run(settings, api):
+                start, end = validate_date_range(
+                    start_date, end_date, max_days=settings.max_range_days
+                )
+                rows = fetch_sleep_range(api, start, end)
+                table: list[dict[str, Any]] = []
+                for row in rows:
+                    has_sleep = (
+                        isinstance(row.sleep_time_seconds, (int, float))
+                        and row.sleep_time_seconds > 0
+                    )
+                    if not include_empty and not has_sleep:
+                        continue
+                    table.append(
+                        {
+                            "calendar_date": row.calendar_date,
+                            "sleep_time_seconds": row.sleep_time_seconds,
+                            "deep_sleep_seconds": row.deep_sleep_seconds,
+                            "light_sleep_seconds": row.light_sleep_seconds,
+                            "rem_sleep_seconds": row.rem_sleep_seconds,
+                            "awake_sleep_seconds": row.awake_sleep_seconds,
+                        }
+                    )
+
+                return {
+                    "ok": True,
+                    "start_date": start.isoformat(),
+                    "end_date": end.isoformat(),
+                    "summary": summarize_sleep(rows),
+                    "rows": table,
+                }
+
+            return _with_garmin(run)
         except Exception as exc:
             return _handle_known_errors(exc)
 
@@ -258,12 +278,15 @@ def garmin_get_health_history(start_date: str, end_date: str) -> dict[str, Any]:
     with _span("garmin_get_health_history"):
         try:
             _set_span_attrs(operation="garmin_get_health_history", start_date=start_date, end_date=end_date)
-            settings, api = _get_api()
-            start, end = validate_date_range(start_date, end_date, max_days=settings.max_range_days)
-            rows = fetch_health_range(api, start, end)
-            summary = summarize_health_history(rows)
-            return {"ok": True, "start_date": start.isoformat(), "end_date": end.isoformat(),
-                    "summary": summary, "rows": rows}
+
+            def run(settings, api):
+                start, end = validate_date_range(start_date, end_date, max_days=settings.max_range_days)
+                rows = fetch_health_range(api, start, end)
+                summary = summarize_health_history(rows)
+                return {"ok": True, "start_date": start.isoformat(), "end_date": end.isoformat(),
+                        "summary": summary, "rows": rows}
+
+            return _with_garmin(run)
         except Exception as exc:
             return _handle_known_errors(exc)
 
@@ -288,20 +311,23 @@ def garmin_get_calories(
                 end_date=end_date,
                 include_empty=include_empty,
             )
-            settings, api = _get_api()
-            start, end = validate_date_range(
-                start_date, end_date, max_days=settings.max_range_days
-            )
-            rows = fetch_calories_range(api, start, end)
-            table = [calories_row(row) for row in rows if include_empty or calories_has_data(row)]
 
-            return {
-                "ok": True,
-                "start_date": start.isoformat(),
-                "end_date": end.isoformat(),
-                "summary": summarize_calories(rows),
-                "rows": table,
-            }
+            def run(settings, api):
+                start, end = validate_date_range(
+                    start_date, end_date, max_days=settings.max_range_days
+                )
+                rows = fetch_calories_range(api, start, end)
+                table = [calories_row(row) for row in rows if include_empty or calories_has_data(row)]
+
+                return {
+                    "ok": True,
+                    "start_date": start.isoformat(),
+                    "end_date": end.isoformat(),
+                    "summary": summarize_calories(rows),
+                    "rows": table,
+                }
+
+            return _with_garmin(run)
         except Exception as exc:
             return _handle_known_errors(exc)
 

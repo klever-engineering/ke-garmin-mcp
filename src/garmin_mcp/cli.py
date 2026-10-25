@@ -23,6 +23,7 @@ from .client import (
     validate_date_range,
 )
 from .config import load_settings
+from .session import RetryingGarmin
 
 app = typer.Typer(
     help="Garmin local connector (CLI + MCP support bootstrap)."
@@ -70,7 +71,7 @@ def day_command(
     settings = load_settings()
     parsed_date = parse_date(target_date)
 
-    api = login(settings, force_credentials=False)
+    api = RetryingGarmin(login(settings, force_credentials=False))
     snapshot = fetch_day_snapshot(api, parsed_date)
     payload = {
         "calendar_date": snapshot.calendar_date,
@@ -106,7 +107,7 @@ def activities_command(
     """List activities by date range."""
     settings = load_settings()
     start, end = validate_date_range(start_date, end_date, max_days=settings.max_range_days)
-    api = login(settings, force_credentials=False)
+    api = RetryingGarmin(login(settings, force_credentials=False))
     activities = fetch_activities_range(
         api, start, end, activity_type=activity_type.strip() or None
     )
@@ -133,7 +134,7 @@ def sleep_range_command(
     """Get sleep rows and summary for a date range."""
     settings = load_settings()
     start, end = validate_date_range(start_date, end_date, max_days=settings.max_range_days)
-    api = login(settings, force_credentials=False)
+    api = RetryingGarmin(login(settings, force_credentials=False))
     rows = fetch_sleep_range(api, start, end)
 
     output_rows = []
@@ -175,7 +176,7 @@ def calories_command(
     """Get daily calories burned/consumed and a summary for a date range."""
     settings = load_settings()
     start, end = validate_date_range(start_date, end_date, max_days=settings.max_range_days)
-    api = login(settings, force_credentials=False)
+    api = RetryingGarmin(login(settings, force_credentials=False))
     rows = fetch_calories_range(api, start, end)
 
     output_rows = [calories_row(row) for row in rows if include_empty or calories_has_data(row)]

@@ -123,6 +123,38 @@ The MCP normalizes this (`wear_data_status` in `src/garmin_mcp/client.py`):
 Dates with no Garmin record at all return null for every field. Both cases are
 covered by `tests/test_contract.py`.
 
+## Request budget
+
+The MCP server logs in to Garmin **once per process** and reuses the client
+(`src/garmin_mcp/session.py`). A token login itself costs 2 Garmin requests
+(profile and user settings), so this matters for the 24/7 service.
+
+| Tool call | Garmin data requests |
+|---|---|
+| `garmin_get_day_overview` | 3 (summary, sleep, activities) |
+| `garmin_list_activities` | 1 |
+| `garmin_get_sleep_range` | 1 per day |
+| `garmin_get_calories` | 1 per day |
+| `garmin_get_health_history` | 1 per day + 1 (Body Battery range) |
+
+With the default `GARMIN_MAX_RANGE_DAYS=93`, one call makes at most 94 data
+requests. Each data request is tried at most 3 times: after a rate limit (429)
+or connection error the server waits 2 s, then 4 s, so the worst case is 3x
+the table above. Any other error is not retried.
+
+Login rules:
+
+- A username/password login happens only when the saved tokens are missing,
+  corrupt, or rejected by Garmin. Network failures and rate limits during a
+  token login are reported as `connection_error` / `rate_limited`, never
+  "fixed" with a password login (repeated credential logins risk Garmin rate
+  limits or an account lock). The fallback reason is logged by error class only.
+- If Garmin rejects the session during a tool call, the server logs in again
+  once and repeats the call; a second rejection is returned as
+  `authentication_error`.
+- Settings (`.env`) are read once per process; restart the service after
+  changing them.
+
 ## Docker
 
 Build:

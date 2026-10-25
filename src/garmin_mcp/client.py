@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import json
+import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from statistics import median
 from typing import Any
 
-from garminconnect import Garmin
+import requests
+from garminconnect import Garmin, GarminConnectAuthenticationError
 
 from .config import Settings
 
@@ -43,8 +46,42 @@ class SleepNight:
     source_payload: dict[str, Any]
 
 
+logger = logging.getLogger(__name__)
+
+NETWORK_ERRORS = (requests.exceptions.ConnectionError, requests.exceptions.Timeout, ConnectionError, TimeoutError)
+
+
 class GarminAuthError(RuntimeError):
     """Raised when no valid Garmin auth path is available."""
+
+
+def _cause_chain(exc: BaseException) -> list[BaseException]:
+    chain: list[BaseException] = []
+    current: BaseException | None = exc
+    while current is not None and current not in chain and len(chain) < 10:
+        chain.append(current)
+        current = current.__cause__ or current.__context__
+    return chain
+
+
+def is_token_problem(exc: BaseException) -> bool:
+    """True when a token login failed because the stored tokens are unusable.
+
+    Only then is a username/password login justified. Network failures, rate
+    limits and other errors must surface instead: a password login would not
+    fix them and repeated credential logins risk Garmin rate limits or an
+    account lock. garminconnect can wrap a network failure in an
+    authentication error (for example "Failed to retrieve profile"), so the
+    root cause decides.
+    """
+    chain = _cause_chain(exc)
+    if any(isinstance(item, NETWORK_ERRORS) for item in chain):
+        return False
+    if isinstance(exc, FileNotFoundError):
+        return True  # no tokens saved yet
+    if any(isinstance(item, json.JSONDecodeError) for item in chain):
+        return True  # corrupt token file
+    return isinstance(exc, GarminConnectAuthenticationError)
 
 
 def parse_date(value: str, *, field_name: str = "date") -> date:
@@ -73,11 +110,11 @@ def login(settings: Settings, force_credentials: bool = False) -> Garmin:
         try:
             api.login(tokenstore=tokenstore)
             return api
-        except FileNotFoundError:
-            pass
-        except Exception:
-            # Token files can expire or become invalid; fallback to credentials.
-            pass
+        except Exception as exc:
+            if not is_token_problem(exc):
+                raise
+            # Log the reason class only; messages may contain account details.
+            logger.warning("Garmin token login failed (%s); using credential login", type(exc).__name__)
 
     if not settings.garmin_username or not settings.garmin_password:
         raise GarminAuthError(
