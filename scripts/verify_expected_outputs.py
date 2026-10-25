@@ -142,7 +142,9 @@ def adrs() -> list[tuple[Path, str]]:
 
 def accepted_adr(name: str, pattern: str) -> Check:
     for path, text in adrs():
-        if re.search(pattern, text, re.I) and re.search(r"status:\s*accepted", text, re.I):
+        title = text.splitlines()[0] if text else ""
+        # Match the ADR's title, not passing mentions in other ADRs.
+        if re.search(pattern, title, re.I) and re.search(r"status:\s*accepted", text, re.I):
             indexed = path.name in read(ROOT / "docs" / "ADR" / "README.md")
             return ok(name, indexed, f"{path.relative_to(ROOT)} accepted and indexed",
                       f"{path.relative_to(ROOT)} accepted but not listed in docs/ADR/README.md")
