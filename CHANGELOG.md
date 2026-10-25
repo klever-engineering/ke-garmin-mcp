@@ -6,6 +6,12 @@ This project follows semantic versioning on its response contract
 
 ## Unreleased
 
+### Added
+- Per-client bearer tokens on the HTTP transport (ADR 0007):
+  `GARMIN_MCP_CLIENT_TOKENS`, `GARMIN_MCP_AUTH=observe` for rollout, HTTP 401
+  for a missing or unknown token, one access-log line per request, and a refusal
+  to bind beyond localhost without enforced tokens.
+
 ### Changed (runtime)
 - Default token directory is `~/.config/lifeos/garmin-mcp/tokens`
   (`$XDG_CONFIG_HOME/lifeos/garmin-mcp/tokens` when set), created with mode

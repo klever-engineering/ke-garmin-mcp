@@ -56,6 +56,8 @@ Settings are read once per server process; restart the service after changes
 | `GARMIN_TOKENS_DIR` | no | `~/.config/lifeos/garmin-mcp/tokens` (`$XDG_CONFIG_HOME/lifeos/garmin-mcp/tokens` when set) | Token directory; relative paths resolve from the workspace root (the folder containing `config/` and `repositories/`) |
 | `GARMIN_MAX_RANGE_DAYS` | no | `93` | Largest date range a range tool accepts |
 | `GARMIN_ENV_FILE` | no | unset | Explicit `.env` path |
+| `GARMIN_MCP_CLIENT_TOKENS` | no | unset | `name=token,...` per-client bearer tokens for HTTP; see "Client access" |
+| `GARMIN_MCP_AUTH` | no | `enforce` when tokens are set | `observe` accepts requests without a valid token and logs them |
 | `GARMIN_MCP_HOST`, `GARMIN_MCP_PORT` | no | `127.0.0.1`, `8000` | HTTP bind; the older `FASTMCP_HOST`/`FASTMCP_PORT` names still work |
 | `LIFEOS_OTEL_DISABLE_OTLP` | no | `1` in the scripts | Set `0` to export traces over OTLP |
 
@@ -263,8 +265,8 @@ docker compose run --rm garmin-mcp
 
 Run the streamable-HTTP server in Docker instead (the production path is the
 systemd user service; this is for portable or test setups). Bind the
-published port to localhost only, since the server has no client
-authentication yet (#17):
+published port to localhost only, and set `GARMIN_MCP_CLIENT_TOKENS` before
+binding `0.0.0.0` inside the container (the server refuses otherwise):
 
 ```bash
 docker run --rm --user "$(id -u):$(id -g)" -p 127.0.0.1:8000:8000 \
@@ -273,6 +275,31 @@ docker run --rm --user "$(id -u):$(id -g)" -p 127.0.0.1:8000:8000 \
   -v "$HOME/.config/lifeos/garmin-mcp/tokens:/data/tokens" \
   lifeos.garmin-mcp:local --transport streamable-http
 ```
+
+## Client access
+
+The HTTP server listens on localhost only. Each app that calls it gets its own
+bearer token ([ADR 0007](docs/ADR/0007-access-model-for-multi-app-use.md)):
+
+| App | Token variable in the workspace `.env` |
+|---|---|
+| life-daily-report | `LDR_GARMIN_TOKEN` |
+| lifeos-sessions (host launcher, Garmin refresh) | `LIFEOS_GARMIN_MCP_TOKEN` |
+
+The server lists the same tokens in `GARMIN_MCP_CLIENT_TOKENS`
+(`life-daily-report=<token>,lifeos-sessions=<token>`). Requests without a
+matching `Authorization: Bearer` token get HTTP 401. Each request is logged
+with the client name, method, tool, date arguments and status, never with
+tokens or Garmin values:
+
+```bash
+journalctl --user-unit lifeos-garmin-mcp.service -o cat | grep ' access '
+```
+
+The server refuses to bind beyond localhost unless tokens are enforced. stdio
+clients are not affected. To add an app, generate a token, append
+`name=token` to `GARMIN_MCP_CLIENT_TOKENS`, give the app its token, and restart
+the service.
 
 ## 24/7 user service
 

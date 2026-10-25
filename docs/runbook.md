@@ -67,4 +67,5 @@ the old version needs the old garth token files; run
 | Tools return `authentication_error` | Saved tokens rejected and no credentials in `.env` | Add credentials, run `lifeos.garmin-cli login`, restart |
 | Tools return `rate_limited` | Garmin 429 after 3 tries | Wait a few minutes; see README "Request budget" |
 | `mcp_stdio.sh` exits "runtime is missing" | `.venv` missing or incomplete | `./scripts/bootstrap.sh` |
+| Consumer gets HTTP 401 | Its token is missing or differs from `GARMIN_MCP_CLIENT_TOKENS` | Compare the app's token variable in `.env` (README "Client access"), restart the service |
 | Service restarts in a loop | Missing `.venv` or a Python error | `journalctl --user-unit lifeos-garmin-mcp.service -n 100` |

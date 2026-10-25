@@ -537,6 +537,27 @@ def out_17(ctx: Ctx) -> list[Check]:
                   "last lifeos-garmin-refresh run succeeded after the current server start",
                   f"result={props.get('Result')}; ran after server start={ran_after} (wait for the 6-hourly timer)")
 
+    def deployed_sessions_sends_token() -> Check:
+        """The code that calls the server is the deployed launcher release, not the checkout."""
+        _, out = run(["systemctl", "--user", "show", "lifeos-session-launcher.service", "-p", "WorkingDirectory"])
+        release = Path(out.partition("=")[2].strip() or "/nonexistent")
+        code = read(release / "src" / "lifeos_sessions" / "garmin_signals.py")
+        return ok("deployed lifeos-sessions launcher sends a credential", "Authorization" in code,
+                  f"release {release.name[:12]} sets Authorization",
+                  f"deployed release {release.name[:12]} sends no Authorization header (deploy lifeos-sessions)")
+
+    def clients_attributed() -> Check:
+        """Both consumers reached the server with their own token since it started."""
+        _, start = run(["systemctl", "--user", "show", SERVICE, "-p", "ExecMainStartTimestamp"])
+        since = start.partition("=")[2].strip()
+        _, log = run(["journalctl", "--user-unit", SERVICE, "--no-pager", "-o", "cat",
+                      *(["--since", " ".join(since.split()[1:3])] if since else [])])
+        seen = {name for name in ("life-daily-report", "lifeos-sessions") if f"client={name} " in log}
+        anonymous = "client=unauthenticated" in log
+        return ok("both consumers call with their own token", seen == {"life-daily-report", "lifeos-sessions"} and not anonymous,
+                  "access log shows life-daily-report and lifeos-sessions, no unauthenticated calls",
+                  f"authenticated since start: {sorted(seen)}; unauthenticated calls: {anonymous}")
+
     ldr = read(LDR_DIR / "src" / "life_daily_report" / "sources" / "garmin.py")
     sessions = read(SESSIONS_DIR / "src" / "lifeos_sessions" / "garmin_signals.py")
     return [
@@ -546,7 +567,10 @@ def out_17(ctx: Ctx) -> list[Check]:
            "life-daily-report Garmin source sends no Authorization header"),
         ok("lifeos-sessions refresh sends a credential", "Authorization" in sessions,
            "lifeos-sessions garmin_signals sets Authorization",
-           "lifeos-sessions garmin_signals.py sends no Authorization header"),
+           "lifeos-sessions garmin_signals.py (main) sends no Authorization header"),
+        live(ctx, "deployed lifeos-sessions launcher sends a credential", deployed_sessions_sends_token),
+        live(ctx, "both consumers call with their own token", clients_attributed),
+        unit_tests(ctx),
         ldr_live_status(ctx),
         live(ctx, "lifeos-sessions refresh succeeded since the server restarted", refresh_after_restart),
     ]

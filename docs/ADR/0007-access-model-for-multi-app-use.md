@@ -1,6 +1,6 @@
 # ADR 0007: Access Model for Multi-App Use
 
-- Status: Proposed (awaiting owner decision)
+- Status: Accepted (owner approved option 2 on 2026-10-25)
 - Date: 2026-10-25
 - Issue: #17
 
@@ -36,7 +36,7 @@ Observed on 2026-10-25:
    apps off this machine must call the server; much more setup (TLS, an
    authorization server). Out of scope until such an app exists.
 
-## Proposed decision
+## Decision
 
 Adopt option 2:
 
@@ -44,9 +44,13 @@ Adopt option 2:
   tokens are configured.
 - `GARMIN_MCP_CLIENT_TOKENS` (in the workspace `.env`) holds
   `name=token` pairs, for example `life-daily-report=...,lifeos-sessions=...`.
-  When it is set, every HTTP request must carry a matching bearer token. When
-  it is unset, the server keeps today's behavior and logs a startup warning,
-  so the rollout can proceed one step at a time.
+  When it is set, every HTTP request must carry a matching bearer token (HTTP
+  401 otherwise). When it is unset, the server keeps today's behavior and logs
+  a startup warning. `GARMIN_MCP_AUTH=observe` accepts requests without a valid
+  token but logs them as `client=unauthenticated`, so the tokens can be rolled
+  out one consumer at a time.
+- Tokens are at least 32 characters, unique per client, and compared in
+  constant time. Startup fails on a malformed `GARMIN_MCP_CLIENT_TOKENS`.
 - Log one line per tool call: time, client name, tool, date range, result
   code. No Garmin values in logs.
 - stdio is unchanged: it is reachable only by the process that launched it.
@@ -63,7 +67,12 @@ Adopt option 2:
    `lifeos-garmin-refresh.service` run succeed.
 4. Mark this ADR Accepted.
 
-## Decision needed from the owner
+## Implementation
 
-- Accept option 2, or choose 1 or 3.
-- Confirm that the tokens live in the workspace `.env` (not tracked).
+- `src/garmin_mcp/access.py`: token parsing, bind check, ASGI middleware and
+  the access log (`access client=... method=... tool=... dates=... status=...`).
+- Consumers: life-daily-report reads `LDR_GARMIN_TOKEN`; lifeos-sessions reads
+  `LIFEOS_GARMIN_MCP_TOKEN` from its environment or from that single key in
+  the workspace `.env` (`LIFEOS_OPENCLAW_ENV_FILE`).
+- The owner confirmed that the tokens live in the workspace `.env`, which is
+  not tracked.

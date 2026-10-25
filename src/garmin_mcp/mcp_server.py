@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 from contextlib import nullcontext
 from importlib import metadata
@@ -24,9 +25,12 @@ from opentelemetry.sdk.trace.export import (
     SimpleSpanProcessor,
 )
 
-from . import contract
+from . import access, contract
+from .config import load_runtime_env
 from .client import GarminAuthError, parse_date, validate_date_range
 from .session import GarminSession
+
+logger = logging.getLogger("garmin_mcp.mcp_server")  # also when run as __main__
 
 def _package_version() -> str:
     try:
@@ -289,18 +293,44 @@ def http_bind() -> tuple[str, int]:
     return host, port
 
 
-def build_http_app(transport: str = "streamable-http", host: str = "127.0.0.1"):
-    """The ASGI app served over HTTP (streamable HTTP at /mcp, or SSE)."""
-    if transport == "sse":
-        return mcp.sse_app(host=host)
-    return mcp.streamable_http_app(host=host)
+def build_http_app(transport: str = "streamable-http", host: str = "127.0.0.1",
+                   policy: access.AccessPolicy | None = None):
+    """The ASGI app served over HTTP (streamable HTTP at /mcp, or SSE).
+
+    With client tokens configured, requests go through the bearer-token check
+    (ADR 0007).
+    """
+    app = mcp.sse_app(host=host) if transport == "sse" else mcp.streamable_http_app(host=host)
+    if policy is None or policy.mode == "off":
+        return app
+    return access.ClientAuthMiddleware(app, policy)
+
+
+def _plain_logging() -> None:
+    """One line per record for this package, so journal lines stay greppable."""
+    package = logging.getLogger("garmin_mcp")
+    if not any(getattr(h, "_garmin_plain", False) for h in package.handlers):
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(levelname)s %(name)s %(message)s"))
+        handler._garmin_plain = True
+        package.addHandler(handler)
+        package.propagate = False
 
 
 def run_http(transport: str) -> None:
     import uvicorn
 
+    _plain_logging()
+    load_runtime_env()
     host, port = http_bind()
-    uvicorn.run(build_http_app(transport, host), host=host, port=port, log_level="warning")
+    policy = access.load_policy()
+    access.check_bind(host, policy)
+    if policy.mode == "off":
+        logger.warning("HTTP client tokens are not set (GARMIN_MCP_CLIENT_TOKENS); any local process can call the server")
+    else:
+        logger.warning("HTTP client tokens %s for: %s", "enforced" if policy.mode == "enforce" else "observed only",
+                       ", ".join(sorted(policy.tokens)))
+    uvicorn.run(build_http_app(transport, host, policy), host=host, port=port, log_level="warning")
 
 
 def main() -> None:
