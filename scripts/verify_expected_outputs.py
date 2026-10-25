@@ -380,23 +380,23 @@ def out_12(ctx: Ctx) -> list[Check]:
         or "generated" in read(ROOT / "requirements.txt").lower()[:300]
 
     def current() -> Check:
-        lagging = []
-        for pkg in ("garminconnect", "garth"):
-            rc, out = run([str(VENV_PYTHON), "-m", "pip", "show", pkg], timeout=60)
-            installed = re.search(r"^Version:\s*(\S+)", out, re.M)
-            with urllib.request.urlopen(f"https://pypi.org/pypi/{pkg}/json", timeout=20) as resp:
-                latest = json.load(resp)["info"]["version"]
-            inst = installed.group(1) if installed else "?"
-            if inst.split(".")[:2] != latest.split(".")[:2]:
-                lagging.append(f"{pkg} {inst} < {latest}")
-        return ok("garminconnect and garth on current minor release", not lagging, "both current", "; ".join(lagging))
+        # garminconnect >= 0.3 replaced garth with its own SSO client, so the
+        # auth library to keep current is garminconnect itself (ADR 0005).
+        rc, out = run([str(VENV_PYTHON), "-c", "import importlib.metadata as m; print(m.version('garminconnect'))"], timeout=60)
+        inst = out.strip() if rc == 0 else "?"
+        with urllib.request.urlopen("https://pypi.org/pypi/garminconnect/json", timeout=20) as resp:
+            latest = json.load(resp)["info"]["version"]
+        same = inst.split(".")[:2] == latest.split(".")[:2]
+        return ok("garminconnect on current minor release", same, f"installed {inst}, latest {latest}",
+                  f"installed {inst} < latest {latest}")
 
     return [
         ok("lock file exists", bool(locks), f"lock: {locks}", "no uv.lock / pylock.toml / requirements.lock"),
-        ok("lock pins garth", "garth" in lock_text, "garth pinned in lock", "garth not in a lock file"),
+        ok("lock pins garminconnect and its auth transport", all(f'name = "{p}"' in lock_text for p in ("garminconnect", "curl-cffi")),
+           "uv.lock pins garminconnect and curl-cffi", "garminconnect/curl-cffi not pinned in a lock file"),
         ok("pyproject is the single dependency source", single, "requirements.txt absent or generated",
            "requirements.txt is still hand-maintained alongside pyproject.toml"),
-        live(ctx, "garminconnect and garth on current minor release", current),
+        live(ctx, "garminconnect on current minor release", current),
         accepted_adr("decision recorded on mcp 2.x", r"mcp\s*2"),
         unit_tests(ctx),
         ci_on_main(ctx),
@@ -563,11 +563,13 @@ def _probe_env():
 
     class FakeGarmin:
         def __init__(self, *args, **kwargs):
+            # A client built with credentials performs a password login.
+            self.has_credentials = bool(kwargs.get("email") or args)
             self.garth = mock.Mock()
 
         def login(self, tokenstore=None, *args, **kwargs):
-            State.logins.append("token" if tokenstore else "password")
-            if tokenstore and State.token_error is not None:
+            State.logins.append("password" if self.has_credentials or not tokenstore else "token")
+            if not self.has_credentials and State.token_error is not None:
                 raise State.token_error
             return None, None
 
