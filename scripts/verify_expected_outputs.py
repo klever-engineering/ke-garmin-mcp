@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Observe whether this Track's LifeOS expected outputs are accomplished.
 
-Each LifeOS expected output for the Garmin MCP Track (GitHub issues #6-#17) has
+Each LifeOS expected output for the Garmin MCP Track (GitHub issues #6-#18) has
 a done-when criterion. This script checks every criterion directly against the
 repository, the test suites, GitHub CI, the running service, and behavior
 probes against a fake Garmin client, so an agent or the owner can see the
@@ -65,6 +65,7 @@ OUTPUT_IDS = {
     15: "bd27d0a7-ec50-4f59-b9df-903b730613ea",
     16: "0f678da0-b8da-43b5-9a13-c99afa373a71",
     17: "246b0c50-3332-46a9-9602-bf0c88d425ca",
+    18: "004c4e83-a638-49dd-b11a-f77bbfca1d28",
 }
 
 
@@ -476,6 +477,42 @@ def out_17(ctx: Ctx) -> list[Check]:
     ]
 
 
+def out_18(ctx: Ctx) -> list[Check]:
+    def live_flag() -> Check:
+        got = mcp_call("garmin_get_day_overview", {"target_date": NO_WEAR_DAY})
+        return ok("live 2026-08-19 day overview carries the no-wear flag", _no_wear_flag(got),
+                  f"flag present; daily_summary={got.get('daily_summary')}",
+                  f"no no-wear flag; daily_summary={got.get('daily_summary')}")
+    readme = read(ROOT / "README.md")
+    return [
+        probe("no_wear_day_is_flagged_and_not_zero"),
+        ok("README describes the normalized no-wear behavior", "currently\npasses those values through" not in readme
+           and "currently passes those values through" not in readme and "No-wear day" in readme,
+           "README no longer says values are passed through", "README still says no-wear values are passed through"),
+        unit_tests(ctx),
+        live(ctx, "live 2026-08-19 day overview carries the no-wear flag", live_flag),
+    ]
+
+
+NO_WEAR_DAY = "2026-08-19"
+# Raw Garmin summary observed for a no-wear day (2026-08-19, trimmed).
+NO_WEAR_SUMMARY = {"totalSteps": None, "totalDistanceMeters": 0, "activeKilocalories": 0.0,
+                   "bmrKilocalories": 2047.0, "totalKilocalories": 2047.0, "wellnessKilocalories": 2047.0,
+                   "restingHeartRate": None, "averageStressLevel": -1, "sedentarySeconds": 86400,
+                   "highlyActiveSeconds": 0}
+
+
+def _no_wear_flag(payload: dict) -> bool:
+    """Accept any explicit no-wear marker the implementation chooses."""
+    blobs = [payload, payload.get("daily_summary") or {}, payload.get("calories") or {}]
+    for blob in blobs:
+        if blob.get("wear_data") is False or blob.get("no_wear") is True:
+            return True
+        if "no_wear" in str(blob.get("data_status", "")).lower():
+            return True
+    return False
+
+
 OUTPUTS = {
     6: ("Daily report treats Garmin MCP errors and undated payloads as warnings", out_06),
     7: ("Day overview default date resolved per call, live in the service", out_07),
@@ -489,6 +526,7 @@ OUTPUTS = {
     15: ("Single response-contract module for CLI and MCP", out_15),
     16: ("HTTP access-point ADR, versioning and CHANGELOG", out_16),
     17: ("Access model and client authentication", out_17),
+    18: ("No-wear days flagged instead of reported as zeros", out_18),
 }
 
 
@@ -639,6 +677,22 @@ def run_probe(name: str) -> None:
                 differ.append(command)
         _result("FAIL" if differ else "PASS", f"CLI and MCP payloads differ for: {differ}" if differ
                 else "CLI and MCP return identical payloads for day, activities, sleep-range, calories")
+    elif name == "no_wear_day_is_flagged_and_not_zero":
+        State.summary = dict(NO_WEAR_SUMMARY)
+        overview = server.garmin_get_day_overview(NO_WEAR_DAY)
+        calories = server.garmin_get_calories(NO_WEAR_DAY, NO_WEAR_DAY)
+        ds = overview.get("daily_summary", {})
+        problems = []
+        if ds.get("distance_meters") is not None:
+            problems.append(f"distance_meters={ds.get('distance_meters')}")
+        if ds.get("active_kilocalories") is not None:
+            problems.append(f"active_kilocalories={ds.get('active_kilocalories')}")
+        if not _no_wear_flag(overview):
+            problems.append("no no-wear flag")
+        if calories.get("summary", {}).get("tracked_days"):
+            problems.append(f"calories tracked_days={calories['summary']['tracked_days']}")
+        _result("FAIL" if problems else "PASS", "; ".join(problems) if problems
+                else "no-wear day: null distance/active kcal, flagged, excluded from calorie tracking")
     else:
         _result("FAIL", f"unknown probe {name}")
 
