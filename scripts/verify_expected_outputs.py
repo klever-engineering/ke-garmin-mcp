@@ -452,17 +452,29 @@ def _token_permissions(candidates: list[Path]) -> Check:
 
 def out_14(ctx: Ctx) -> list[Check]:
     rc, out = run(["git", "grep", "-nE", r"/media/|/home/[a-z]", "--", ".", ":!scripts/verify_expected_outputs.py"])
-    unit = read(ROOT / "systemd" / "lifeos-garmin-mcp.service")
+    unit = read(ROOT / "systemd" / "lifeos-garmin-mcp.service.in")
     runbook = next((p for p in (ROOT / "docs").rglob("*.md") if re.search(r"systemctl --user (enable|start)", read(p))), None)
     return [
         ok("no absolute machine paths in tracked files", rc == 1 and not out, "git grep found none", tail(out, 3)),
-        ok("systemd unit is portable", "%h" in unit or "EnvironmentFile" in unit or not unit,
-           "unit uses %h/EnvironmentFile", "unit has no %h or EnvironmentFile"),
-        ok("stdio launcher does not install packages", "bootstrap.sh" not in read(ROOT / "scripts" / "mcp_stdio.sh"),
+        ok("systemd unit is portable", "@PROJECT_DIR@" in unit and (ROOT / "scripts" / "install-user-service.sh").exists(),
+           "unit template uses @PROJECT_DIR@, rendered by scripts/install-user-service.sh",
+           "no systemd/lifeos-garmin-mcp.service.in template with @PROJECT_DIR@ plus install script"),
+        ok("stdio launcher does not install packages", not _runs_installer(read(ROOT / "scripts" / "mcp_stdio.sh")),
            "mcp_stdio.sh never calls bootstrap.sh", "mcp_stdio.sh still runs bootstrap.sh (pip install) at startup"),
         ok("install/update runbook exists", runbook is not None,
            f"runbook: {runbook.relative_to(ROOT) if runbook else ''}", "no docs/*.md with `systemctl --user enable|start` steps"),
     ]
+
+
+def _runs_installer(script: str) -> bool:
+    """True if a shell line executes bootstrap.sh or pip install (not just mentions it)."""
+    for line in script.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith(("#", "echo")):
+            continue
+        if "bootstrap.sh" in stripped or re.search(r"pip\s+install", stripped):
+            return True
+    return False
 
 
 def out_15(ctx: Ctx) -> list[Check]:
