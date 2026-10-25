@@ -1,6 +1,6 @@
 # ADR 0003: Phase-1 Scope and Interface
 
-- Status: Accepted
+- Status: Superseded by [ADR 0006](0006-streamable-http-access-point.md)
 - Date: 2026-03-03
 
 ## Context

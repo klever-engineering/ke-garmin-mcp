@@ -118,12 +118,15 @@ Every tool response (and the matching CLI command output) is built in
 "source": {
   "provider": "garmin_connect",
   "client": "garminconnect 0.3.20",
+  "server": "garmin-mcp 0.2.0",
   "endpoints": ["get_user_summary", "get_sleep_data", "get_activities_by_date"],
   "retrieved_at": "2026-10-25T19:30:00+00:00",
   "date_basis": "garmin_calendar_date_local"
 }
 ```
 
+`server` is the response-contract version (semantic versioning, see
+[ADR 0006](docs/ADR/0006-streamable-http-access-point.md) and `CHANGELOG.md`).
 Dates are Garmin calendar dates in the account's local time zone.
 `retrieved_at` is when this server read the values (UTC).
 

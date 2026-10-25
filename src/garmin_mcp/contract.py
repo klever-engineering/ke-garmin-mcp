@@ -35,11 +35,11 @@ from .client import (
 PROVIDER = "garmin_connect"
 
 
-def _client_version() -> str:
+def _version(package: str) -> str:
     try:
-        return f"garminconnect {metadata.version('garminconnect')}"
+        return f"{package} {metadata.version(package)}"
     except metadata.PackageNotFoundError:
-        return "garminconnect"
+        return package
 
 
 def source(*endpoints: str) -> dict[str, Any]:
@@ -50,7 +50,9 @@ def source(*endpoints: str) -> dict[str, Any]:
     """
     return {
         "provider": PROVIDER,
-        "client": _client_version(),
+        "client": _version("garminconnect"),
+        # Contract version (ADR 0006); see CHANGELOG.md.
+        "server": _version("garmin-mcp"),
         "endpoints": list(endpoints),
         "retrieved_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "date_basis": "garmin_calendar_date_local",

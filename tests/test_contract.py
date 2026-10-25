@@ -292,6 +292,7 @@ class SourceAttributionContractTests(unittest.TestCase):
                 src = result["source"]
                 self.assertEqual("garmin_connect", src["provider"])
                 self.assertTrue(src["client"].startswith("garminconnect"))
+                self.assertTrue(src["server"].startswith("garmin-mcp"))
                 self.assertEqual(endpoints, src["endpoints"])
                 self.assertRegex(src["retrieved_at"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+00:00$")
                 self.assertEqual("garmin_calendar_date_local", src["date_basis"])

@@ -1,7 +1,7 @@
 [project]
 name = "garmin-mcp"
-version = "0.1.0"
-description = "Local Garmin Connect phase-1 connector (sleep, workouts, daily metrics)."
+version = "0.2.0"
+description = "Garmin Connect access point for LifeOS and other apps: MCP server (streamable HTTP and stdio) and CLI for daily activity, sleep, workouts and health history."
 readme = "README.md"
 requires-python = ">=3.12"
 # Direct dependencies only, as compatible ranges. Exact versions (including

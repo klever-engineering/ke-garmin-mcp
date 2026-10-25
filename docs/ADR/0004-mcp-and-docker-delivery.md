@@ -1,6 +1,6 @@
 # ADR 0004: MCP and Docker Delivery
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0006](0006-streamable-http-access-point.md) (streamable HTTP is the production transport)
 - Date: 2026-03-03
 
 ## Context
