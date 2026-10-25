@@ -152,12 +152,19 @@ def probe(name: str, timeout: int = 120) -> Check:
     """Run a behavior probe in the repo venv, isolated in its own process."""
     if not VENV_PYTHON.exists():
         return skip(f"probe:{name}", f"missing {VENV_PYTHON.relative_to(ROOT)}; run scripts/bootstrap.sh")
-    rc, out = run([str(VENV_PYTHON), __file__, "--probe", name], timeout=timeout)
     try:
-        data = json.loads(out.splitlines()[-1])
-        return Check(f"probe:{name}", data["status"], data["evidence"])
-    except (ValueError, IndexError, KeyError):
-        return Check(f"probe:{name}", "FAIL", f"probe crashed (rc {rc}): {tail(out)}")
+        done = subprocess.run([str(VENV_PYTHON), __file__, "--probe", name], cwd=ROOT,
+                              capture_output=True, text=True, timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return Check(f"probe:{name}", "FAIL", f"probe could not run: {exc}")
+    # The result is the last JSON line on stdout; logs go to stderr.
+    for line in reversed(done.stdout.splitlines()):
+        try:
+            data = json.loads(line)
+            return Check(f"probe:{name}", data["status"], data["evidence"])
+        except (ValueError, KeyError, TypeError):
+            continue
+    return Check(f"probe:{name}", "FAIL", f"probe crashed (rc {done.returncode}): {tail(done.stdout + done.stderr)}")
 
 
 def mcp_call(tool: str, args: dict, timeout: int = 90) -> dict:
