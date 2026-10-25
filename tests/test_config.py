@@ -36,13 +36,18 @@ class EnvFileTests(unittest.TestCase):
 
 class SettingsTests(unittest.TestCase):
     def test_default_token_dir_is_under_the_workspace_config_folder(self):
-        env = {"GARMIN_ENV_FILE": "/nonexistent/.env"}
-        with mock.patch.dict(os.environ, env), mock.patch.object(config, "load_dotenv"):
+        # Build a throwaway workspace so the test does not depend on where the
+        # checkout lives (CI has no surrounding workspace).
+        root = Path(tempfile.mkdtemp())
+        (root / "config").mkdir()
+        module_file = root / "repositories" / "mcps" / "garmin-mcp" / "src" / "garmin_mcp" / "config.py"
+        module_file.parent.mkdir(parents=True)
+        env = {"GARMIN_ENV_FILE": str(root / "missing.env")}
+        with mock.patch.dict(os.environ, env), mock.patch.object(config, "load_dotenv"), \
+                mock.patch.object(config, "__file__", str(module_file)):
             os.environ.pop("GARMIN_TOKENS_DIR", None)
             settings = config.load_settings()
-        root = config._workspace_root()
-        self.assertTrue((root / "config").is_dir() and (root / "repositories").is_dir())
-        self.assertEqual(root / "config" / "garmin-mcp" / "tokens", settings.garmin_tokens_dir)
+        self.assertEqual(root.resolve() / "config" / "garmin-mcp" / "tokens", settings.garmin_tokens_dir)
 
     def test_env_example_matches_the_code_default(self):
         example = (Path(__file__).resolve().parents[1] / ".env.example").read_text()
