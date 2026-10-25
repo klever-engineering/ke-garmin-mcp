@@ -10,7 +10,8 @@
 ADR 0003 scoped phase 1 as a CLI, and ADR 0004 delivered MCP over `stdio`
 (plus Docker). Since commit cab4804 (2026-06-21) the production path has been
 a long-running streamable-HTTP MCP server run as a systemd user service.
-`repositories/tools/life-daily-report` reads it every day, and the LifeOS
+`repositories/tools/life-daily-report` reads it every day, the lifeos-sessions
+`lifeos-garmin-refresh.timer` reads activities every six hours, and the LifeOS
 Track goal is for this server to be the single access point to the owner's
 Garmin Connect data for LifeOS and other apps. No record described that
 role, how the service is run, or how consumers learn which response contract

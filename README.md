@@ -294,8 +294,13 @@ curl -H 'Accept: text/event-stream' http://127.0.0.1:8000/mcp
 
 Downstream use:
 
-- `repositories/tools/life-daily-report` now reads Garmin data from this
+- `repositories/tools/life-daily-report` reads Garmin data from this
   streamable HTTP service by default.
+- `workspaces/lifeos-sessions` (`lifeos-garmin-refresh.timer`, every 6 hours)
+  reads `garmin_list_activities` to record Garmin activities as LifeOS
+  observations and Signals (`LIFEOS_GARMIN_MCP_URL`).
+- Check both after a release: `../../tools/life-daily-report/scripts/garmin-status`
+  and `systemctl --user show lifeos-garmin-refresh.service -p Result`.
 - If the service is down, the daily report renders a Garmin source warning
   instead of shelling into the Garmin CLI unless its source config is
   intentionally switched back to `transport: "cli"`.
