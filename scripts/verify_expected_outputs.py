@@ -417,26 +417,38 @@ def out_12(ctx: Ctx) -> list[Check]:
     ]
 
 
+def _default_tokens_dir() -> Path:
+    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+    return Path(base).expanduser() / "lifeos" / "garmin-mcp" / "tokens"
+
+
 def out_13(ctx: Ctx) -> list[Check]:
-    candidates = [ROOT / ".state" / "garmin-tokens", WORKSPACE / "config" / "garmin-mcp" / "tokens"]
-    existing = [str(p.relative_to(WORKSPACE)) for p in candidates if p.is_dir() and any(p.iterdir())]
+    default = _default_tokens_dir()
+    legacy = [ROOT / ".state" / "garmin-tokens", WORKSPACE / "config" / "garmin-mcp" / "tokens"]
+    candidates = [default, *legacy]
+    existing = [str(p) for p in candidates if p.is_dir() and any(p.iterdir())]
     scripts = [p for p in (ROOT / "scripts").glob("*.sh")]
     shallow = [p.name for p in scripts if 'PROJECT_DIR}/../.."' in read(p)]
-    cfg_default = re.search(r'GARMIN_TOKENS_DIR",\s*"([^"]+)"', read(ROOT / "src" / "garmin_mcp" / "config.py"))
-    example = re.search(r"^GARMIN_TOKENS_DIR=(\S+)", read(ROOT / ".env.example"), re.M)
-    same = bool(cfg_default and example and cfg_default.group(1) == example.group(1))
+    cfg = read(ROOT / "src" / "garmin_mcp" / "config.py")
+    example = read(ROOT / ".env.example")
+    same = '"lifeos" / "garmin-mcp" / "tokens"' in cfg and "GARMIN_TOKENS_DIR=~/.config/lifeos/garmin-mcp/tokens" in example
     return [
-        ok("exactly one token store on disk", len(existing) == 1, f"token store: {existing}",
-           f"token stores with files: {existing}"),
+        ok("exactly one token store, at the owner-only default", existing == [str(default)],
+           f"token store: {default}", f"token stores with files: {existing}"),
         ok("scripts resolve the workspace root", not shallow, "no script uses PROJECT_DIR/../.. as workspace",
            f"WORKSPACE_DIR resolves to repositories/ in {shallow}"),
-        ok(".env.example token path matches config default", same,
-           f"both {cfg_default.group(1) if cfg_default else None}",
-           f"config={cfg_default.group(1) if cfg_default else None} example={example.group(1) if example else None}"),
+        ok(".env.example documents the config default", same,
+           "both ~/.config/lifeos/garmin-mcp/tokens",
+           "config.py default and .env.example GARMIN_TOKENS_DIR disagree"),
         readme_heading("README configuration reference", r"configuration"),
+        accepted_adr("token location recorded", r"token location"),
         _token_permissions(candidates),
         ok("no legacy garth token files", not any((p / "oauth1_token.json").exists() for p in candidates),
            "no oauth1_token.json/oauth2_token.json left", "old garth token files still present (unused since garminconnect 0.3)"),
+        unit_tests(ctx),
+        live(ctx, "live token login works", lambda: ok(
+            "live token login works", mcp_call("garmin_get_day_overview", {}).get("ok") is True,
+            "live call ok=true")),
     ]
 
 

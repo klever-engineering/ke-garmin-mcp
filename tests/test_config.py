@@ -35,23 +35,46 @@ class EnvFileTests(unittest.TestCase):
 
 
 class SettingsTests(unittest.TestCase):
-    def test_default_token_dir_is_under_the_workspace_config_folder(self):
-        # Build a throwaway workspace so the test does not depend on where the
-        # checkout lives (CI has no surrounding workspace).
-        root = Path(tempfile.mkdtemp())
-        (root / "config").mkdir()
-        module_file = root / "repositories" / "mcps" / "garmin-mcp" / "src" / "garmin_mcp" / "config.py"
-        module_file.parent.mkdir(parents=True)
-        env = {"GARMIN_ENV_FILE": str(root / "missing.env")}
-        with mock.patch.dict(os.environ, env), mock.patch.object(config, "load_dotenv"), \
-                mock.patch.object(config, "__file__", str(module_file)):
-            os.environ.pop("GARMIN_TOKENS_DIR", None)
-            settings = config.load_settings()
-        self.assertEqual(root.resolve() / "config" / "garmin-mcp" / "tokens", settings.garmin_tokens_dir)
+    def load(self, **env):
+        base = {"GARMIN_ENV_FILE": str(Path(tempfile.mkdtemp()) / "missing.env"), **env}
+        with mock.patch.dict(os.environ, base), mock.patch.object(config, "load_dotenv"):
+            for key in ("GARMIN_TOKENS_DIR", "XDG_CONFIG_HOME"):
+                if key not in env:
+                    os.environ.pop(key, None)
+            return config.load_settings()
 
-    def test_env_example_matches_the_code_default(self):
+    def test_default_token_dir_is_owner_config_dir_under_home(self):
+        home = Path(tempfile.mkdtemp())
+        with mock.patch.object(Path, "home", return_value=home):
+            settings = self.load()
+        self.assertEqual(home / ".config" / "lifeos" / "garmin-mcp" / "tokens", settings.garmin_tokens_dir)
+
+    def test_xdg_config_home_moves_the_default(self):
+        xdg = Path(tempfile.mkdtemp())
+        self.assertEqual(xdg / "lifeos" / "garmin-mcp" / "tokens",
+                         self.load(XDG_CONFIG_HOME=str(xdg)).garmin_tokens_dir)
+
+    def test_explicit_token_dir_wins(self):
+        target = Path(tempfile.mkdtemp()) / "tokens"
+        self.assertEqual(target, self.load(GARMIN_TOKENS_DIR=str(target)).garmin_tokens_dir)
+
+    def test_env_example_documents_the_code_default(self):
         example = (Path(__file__).resolve().parents[1] / ".env.example").read_text()
-        self.assertIn("GARMIN_TOKENS_DIR=config/garmin-mcp/tokens", example)
+        self.assertIn("# GARMIN_TOKENS_DIR=~/.config/lifeos/garmin-mcp/tokens", example)
+
+
+class TokenPermissionTests(unittest.TestCase):
+    def test_token_dir_and_files_become_owner_only(self):
+        from garmin_mcp import client
+
+        directory = Path(tempfile.mkdtemp()) / "tokens"
+        directory.mkdir(mode=0o755)
+        token = directory / "garmin_tokens.json"
+        token.write_text("{}")
+        token.chmod(0o644)
+        client.secure_token_dir(directory)
+        self.assertEqual(0o700, directory.stat().st_mode & 0o777)
+        self.assertEqual(0o600, token.stat().st_mode & 0o777)
 
     def test_launch_scripts_do_not_load_env_or_token_defaults_themselves(self):
         scripts = Path(__file__).resolve().parents[1] / "scripts"

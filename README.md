@@ -53,17 +53,17 @@ Settings are read once per server process; restart the service after changes
 | Variable | Required | Default | Meaning |
 |---|---|---|---|
 | `GARMIN_USERNAME`, `GARMIN_PASSWORD` | for the first login and when saved tokens are rejected | none | Garmin Connect credentials |
-| `GARMIN_TOKENS_DIR` | no | `config/garmin-mcp/tokens` | Token directory; relative paths resolve from the workspace root (the folder containing `config/` and `repositories/`) |
+| `GARMIN_TOKENS_DIR` | no | `~/.config/lifeos/garmin-mcp/tokens` (`$XDG_CONFIG_HOME/lifeos/garmin-mcp/tokens` when set) | Token directory; relative paths resolve from the workspace root (the folder containing `config/` and `repositories/`) |
 | `GARMIN_MAX_RANGE_DAYS` | no | `93` | Largest date range a range tool accepts |
 | `GARMIN_ENV_FILE` | no | unset | Explicit `.env` path |
 | `FASTMCP_HOST`, `FASTMCP_PORT` | no | `127.0.0.1`, `8000` | HTTP bind (set by `scripts/mcp_streamable_http.sh`) |
 | `LIFEOS_OTEL_DISABLE_OTLP` | no | `1` in the scripts | Set `0` to export traces over OTLP |
 
-**Token location.** After the garminconnect 0.3 upgrade the token directory
-holds `garmin_tokens.json`. The directory currently sits on a drive mounted
-without Unix permissions, so the token files are readable by other local
-users; moving it to a Linux filesystem under your home directory with owner-only
-permissions is tracked in #13.
+**Token location** ([ADR 0008](docs/ADR/0008-owner-only-token-location.md)).
+The token directory holds `garmin_tokens.json`. The server creates it with
+mode 700, keeps token files at 600, and logs a warning if the filesystem
+ignores permissions (NTFS or FAT mounts), so keep it on the home filesystem.
+In Docker, the container user must be able to read the mounted directory.
 
 ## Tests
 
@@ -247,10 +247,10 @@ docker build -t lifeos.garmin-mcp:local .
 Run stdio MCP:
 
 ```bash
-docker run -i --rm \
+docker run -i --rm --user "$(id -u):$(id -g)" \
   --env-file .env \
-  -e GARMIN_TOKENS_DIR=/data/config/garmin-mcp/tokens \
-  -v "$(pwd)/../../../config:/data/config" \
+  -e GARMIN_TOKENS_DIR=/data/tokens \
+  -v "$HOME/.config/lifeos/garmin-mcp/tokens:/data/tokens" \
   lifeos.garmin-mcp:local --transport stdio
 ```
 
@@ -267,10 +267,10 @@ published port to localhost only, since the server has no client
 authentication yet (#17):
 
 ```bash
-docker run --rm -p 127.0.0.1:8000:8000 \
+docker run --rm --user "$(id -u):$(id -g)" -p 127.0.0.1:8000:8000 \
   --env-file .env -e FASTMCP_HOST=0.0.0.0 -e FASTMCP_PORT=8000 \
-  -e GARMIN_TOKENS_DIR=/data/config/garmin-mcp/tokens \
-  -v "$(pwd)/../../../config:/data/config" \
+  -e GARMIN_TOKENS_DIR=/data/tokens \
+  -v "$HOME/.config/lifeos/garmin-mcp/tokens:/data/tokens" \
   lifeos.garmin-mcp:local --transport streamable-http
 ```
 
@@ -308,7 +308,7 @@ Downstream use:
 ## Security Notes
 
 - Keep `.env` and `.state/` out of git.
-- Token files are sensitive and should remain local under `config/garmin-mcp/tokens/`.
+- Token files are sensitive: keep them in the owner-only token directory (`~/.config/lifeos/garmin-mcp/tokens`, mode 700).
 - Do not store credentials in IDE MCP config; keep them in `.env`.
 
 ## Verifying LifeOS expected outputs

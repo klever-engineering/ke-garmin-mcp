@@ -4,6 +4,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from statistics import median
 from typing import Any
 
@@ -117,6 +118,7 @@ def login(settings: Settings, force_credentials: bool = False) -> Garmin:
         try:
             api = Garmin(retry_attempts=0)
             api.login(tokenstore=tokenstore)
+            secure_token_dir(settings.garmin_tokens_dir)
             return api
         except Exception as exc:
             if not is_token_problem(exc):
@@ -129,7 +131,7 @@ def login(settings: Settings, force_credentials: bool = False) -> Garmin:
             "GARMIN_USERNAME/GARMIN_PASSWORD are required for first login."
         )
 
-    settings.garmin_tokens_dir.mkdir(parents=True, exist_ok=True)
+    secure_token_dir(settings.garmin_tokens_dir)
     api = Garmin(
         email=settings.garmin_username,
         password=settings.garmin_password,
@@ -138,7 +140,24 @@ def login(settings: Settings, force_credentials: bool = False) -> Garmin:
     # With a tokenstore path, garminconnect saves the new tokens there
     # (garmin_tokens.json) after the credential login.
     api.login(tokenstore=tokenstore)
+    secure_token_dir(settings.garmin_tokens_dir)
     return api
+
+
+def secure_token_dir(directory: Path) -> None:
+    """Create the token dir and keep it owner-only (dir 700, token files 600).
+
+    Logs a warning when the filesystem ignores the mode (for example NTFS or
+    FAT mounts), since the tokens would then be readable by other users.
+    """
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    paths = [directory, *directory.glob("*.json")]
+    for path in paths:
+        path.chmod(0o700 if path.is_dir() else 0o600)
+    loose = [path.name for path in paths if path.stat().st_mode & 0o077]
+    if loose:
+        logger.warning("Garmin token files are readable by other users (filesystem ignores chmod); "
+                       "set GARMIN_TOKENS_DIR to a Linux filesystem path")
 
 
 def compact_activity(activity: dict[str, Any]) -> dict[str, Any]:

@@ -15,6 +15,12 @@ def _workspace_root() -> Path:
     return Path.cwd().resolve()
 
 
+def default_tokens_dir() -> Path:
+    """Owner-only location on the home filesystem (XDG config dir), see ADR 0008."""
+    base = os.getenv("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+    return Path(base).expanduser() / "lifeos" / "garmin-mcp" / "tokens"
+
+
 def _resolve_local_path(value: str) -> Path:
     candidate = Path(value).expanduser()
     if candidate.is_absolute():
@@ -56,9 +62,8 @@ class Settings:
 
 def load_settings() -> Settings:
     load_runtime_env()
-    tokens_dir = _resolve_local_path(
-        os.getenv("GARMIN_TOKENS_DIR", "config/garmin-mcp/tokens")
-    )
+    configured = os.getenv("GARMIN_TOKENS_DIR")
+    tokens_dir = _resolve_local_path(configured) if configured else default_tokens_dir()
     max_range_days = int(os.getenv("GARMIN_MAX_RANGE_DAYS", "93"))
     return Settings(
         garmin_username=os.getenv("GARMIN_USERNAME"),

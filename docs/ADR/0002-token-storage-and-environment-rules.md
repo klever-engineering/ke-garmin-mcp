@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-03-03
+- Amended by: ADR 0008 (default token location)
 
 ## Context
 

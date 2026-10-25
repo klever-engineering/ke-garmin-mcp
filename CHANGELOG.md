@@ -4,6 +4,16 @@ This project follows semantic versioning on its response contract
 ([ADR 0006](docs/ADR/0006-streamable-http-access-point.md)). Every response's
 `source.server` names the version that produced it.
 
+## Unreleased
+
+### Changed (runtime)
+- Default token directory is `~/.config/lifeos/garmin-mcp/tokens`
+  (`$XDG_CONFIG_HOME/lifeos/garmin-mcp/tokens` when set), created with mode
+  700; token files are set to 600 after each login, with a warning when the
+  filesystem ignores modes (ADR 0008). Set `GARMIN_TOKENS_DIR` to keep a
+  custom location.
+- Docker mounts the token directory at `/data/tokens` and runs as the host user.
+
 ## 0.2.0 - 2026-10-25
 
 First versioned release of the Garmin access point.

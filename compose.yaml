@@ -4,13 +4,15 @@ services:
       context: .
       dockerfile: Dockerfile
     image: lifeos.garmin-mcp:local
+    # Run as the host user so the owner-only token directory is readable.
+    user: "${GARMIN_DOCKER_USER:-1000:1000}"
     stdin_open: true
     tty: false
     env_file:
       - .env
     environment:
-      GARMIN_TOKENS_DIR: /data/config/garmin-mcp/tokens
+      GARMIN_TOKENS_DIR: /data/tokens
       GARMIN_MAX_RANGE_DAYS: 93
     volumes:
-      - ../../../config:/data/config
+      - ${HOME}/.config/lifeos/garmin-mcp/tokens:/data/tokens
     command: ["--transport", "stdio"]
