@@ -50,7 +50,11 @@ class CliMcpParityTests(unittest.TestCase):
                 self.assertEqual(0, out.exit_code, out.output)
                 mcp_payload = tool()
                 self.assertTrue(mcp_payload.pop("ok"))
-                self.assertEqual(json.loads(out.output), mcp_payload)
+                cli_payload = json.loads(out.output)
+                # retrieved_at is the read time of each call, so it may differ.
+                for payload in (cli_payload, mcp_payload):
+                    payload["source"].pop("retrieved_at")
+                self.assertEqual(cli_payload, mcp_payload)
 
 
 if __name__ == "__main__":

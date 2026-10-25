@@ -7,7 +7,8 @@ key names, null for missing values, wear_data) are documented in the README.
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
+from importlib import metadata
 from typing import Any
 
 from .client import (
@@ -31,6 +32,31 @@ from .client import (
 )
 
 
+PROVIDER = "garmin_connect"
+
+
+def _client_version() -> str:
+    try:
+        return f"garminconnect {metadata.version('garminconnect')}"
+    except metadata.PackageNotFoundError:
+        return "garminconnect"
+
+
+def source(*endpoints: str) -> dict[str, Any]:
+    """Where and when the values were read (OUT_01 source attribution).
+
+    Dates in every response are Garmin calendar dates in the account's local
+    time zone, as Garmin Connect reports them.
+    """
+    return {
+        "provider": PROVIDER,
+        "client": _client_version(),
+        "endpoints": list(endpoints),
+        "retrieved_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "date_basis": "garmin_calendar_date_local",
+    }
+
+
 def _range(start: date, end: date) -> dict[str, str]:
     return {"start_date": start.isoformat(), "end_date": end.isoformat()}
 
@@ -44,6 +70,7 @@ def day_overview(api: Any, day: date) -> dict[str, Any]:
         "calories": compact_calories(snapshot.summary),
         "sleep": compact_sleep_dto(snapshot.sleep),
         "workouts": [compact_activity(activity) for activity in snapshot.activities],
+        "source": source("get_user_summary", "get_sleep_data", "get_activities_by_date"),
     }
 
 
@@ -53,6 +80,7 @@ def activities(api: Any, start: date, end: date, activity_type: str = "") -> dic
         **_range(start, end),
         "count": len(rows),
         "activities": [compact_activity(activity) for activity in rows],
+        "source": source("get_activities_by_date"),
     }
 
 
@@ -73,6 +101,7 @@ def sleep_range(api: Any, start: date, end: date, include_empty: bool = False) -
         **_range(start, end),
         "summary": summarize_sleep(rows),
         "rows": [sleep_row(row) for row in rows if include_empty or sleep_has_data(row)],
+        "source": source("get_sleep_data"),
     }
 
 
@@ -96,9 +125,15 @@ def calories(api: Any, start: date, end: date, include_empty: bool = False) -> d
         **_range(start, end),
         "summary": summarize_calories(rows),
         "rows": [calories_row(row) for row in rows if include_empty or calories_has_data(row)],
+        "source": source("get_user_summary"),
     }
 
 
 def health_history(api: Any, start: date, end: date) -> dict[str, Any]:
     rows = fetch_health_range(api, start, end)
-    return {**_range(start, end), "summary": summarize_health_history(rows), "rows": rows}
+    return {
+        **_range(start, end),
+        "summary": summarize_health_history(rows),
+        "rows": rows,
+        "source": source("get_body_battery", "get_user_summary"),
+    }

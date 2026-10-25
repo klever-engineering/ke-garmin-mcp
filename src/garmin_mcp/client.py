@@ -275,10 +275,11 @@ def calories_has_data(row: CaloriesDay) -> bool:
 def summarize_calories(rows: list[CaloriesDay]) -> dict[str, Any]:
     tracked = [row for row in rows if calories_has_data(row)]
     if not tracked:
+        # No tracked days: totals are unknown, not zero.
         return {
             "tracked_days": 0,
-            "total_active_kilocalories": 0,
-            "total_burned_kilocalories": 0,
+            "total_active_kilocalories": None,
+            "total_burned_kilocalories": None,
             "average_active_kilocalories": None,
             "average_total_kilocalories": None,
         }

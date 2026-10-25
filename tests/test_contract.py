@@ -274,6 +274,37 @@ class NoWearDayContractTests(unittest.TestCase):
         self.assertIsNone(result["rows"][0]["resting_heart_rate"])
 
 
+class SourceAttributionContractTests(unittest.TestCase):
+    CALLS = {
+        "garmin_get_day_overview": ((DAY,), ["get_user_summary", "get_sleep_data", "get_activities_by_date"]),
+        "garmin_list_activities": ((DAY, DAY), ["get_activities_by_date"]),
+        "garmin_get_sleep_range": ((DAY, DAY), ["get_sleep_data"]),
+        "garmin_get_calories": ((DAY, DAY), ["get_user_summary"]),
+        "garmin_get_health_history": ((DAY, DAY), ["get_body_battery", "get_user_summary"]),
+    }
+
+    def test_every_tool_names_provider_endpoints_time_and_date(self):
+        for tool, (args, endpoints) in self.CALLS.items():
+            api = worn_api()
+            api.get_body_battery.return_value = []
+            result = call(tool, *args, api=api)
+            with self.subTest(tool=tool):
+                src = result["source"]
+                self.assertEqual("garmin_connect", src["provider"])
+                self.assertTrue(src["client"].startswith("garminconnect"))
+                self.assertEqual(endpoints, src["endpoints"])
+                self.assertRegex(src["retrieved_at"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+00:00$")
+                self.assertEqual("garmin_calendar_date_local", src["date_basis"])
+                self.assertTrue(result.get("calendar_date") or (result.get("start_date") and result.get("end_date")))
+
+    def test_calorie_totals_are_null_when_no_day_is_tracked(self):
+        summary = call("garmin_get_calories", DAY, DAY, api=empty_api())["summary"]
+
+        self.assertEqual(0, summary["tracked_days"])
+        self.assertIsNone(summary["total_active_kilocalories"])
+        self.assertIsNone(summary["total_burned_kilocalories"])
+
+
 class ErrorEnvelopeContractTests(unittest.TestCase):
     RANGE_TOOLS = ("garmin_list_activities", "garmin_get_sleep_range", "garmin_get_calories",
                    "garmin_get_health_history")

@@ -103,6 +103,55 @@ Exposed tools:
 - `garmin_list_activities(start_date, end_date, activity_type="")`
 - `garmin_get_sleep_range(start_date, end_date, include_empty=false)`
 
+## Response contract
+
+Every tool response (and the matching CLI command output) is built in
+`src/garmin_mcp/contract.py`. MCP responses add `"ok": true`; failures return
+`{"ok": false, "error": "<code>", "message": "..."}` with `error` one of
+`authentication_error`, `rate_limited`, `connection_error`,
+`validation_error`, `unexpected_error`.
+
+**Date and source.** Each response carries `calendar_date` (one day) or
+`start_date`/`end_date` (range), plus:
+
+```json
+"source": {
+  "provider": "garmin_connect",
+  "client": "garminconnect 0.3.20",
+  "endpoints": ["get_user_summary", "get_sleep_data", "get_activities_by_date"],
+  "retrieved_at": "2026-10-25T19:30:00+00:00",
+  "date_basis": "garmin_calendar_date_local"
+}
+```
+
+Dates are Garmin calendar dates in the account's local time zone.
+`retrieved_at` is when this server read the values (UTC).
+
+**Missing values are `null`, never 0.** A real 0 (for example an observed 0 s
+heart-rate zone) stays 0. See [No-wear day semantics](#no-wear-day-semantics)
+for days Garmin fills with zeros.
+
+| Field (tool) | Unit | Kind | Garmin source field |
+|---|---|---|---|
+| `daily_summary.steps` (day) | count | measured | `totalSteps` |
+| `daily_summary.distance_meters` (day) | meters | measured | `totalDistanceMeters` |
+| `daily_summary.active_kilocalories`, `calories.active_kilocalories` (day, calories) | kcal | Garmin estimate from activity | `activeKilocalories` |
+| `daily_summary.resting_heart_rate` (day) | beats per minute | measured | `restingHeartRate` |
+| `calories.total_kilocalories` | kcal | Garmin estimate (BMR + active); `estimate: "bmr_only"` on no-wear days | `totalKilocalories` |
+| `calories.bmr_kilocalories` | kcal | Garmin estimate from profile | `bmrKilocalories` |
+| `calories.consumed_kilocalories` / `remaining_kilocalories` | kcal | user-logged / derived | `consumedKilocalories` / `remainingKilocalories` |
+| `wear_data` (day, calories rows, health rows) | true / false / null | derived (see no-wear rule) | `totalSteps`, `averageStressLevel`, `sedentarySeconds` |
+| `sleep.sleep_time_seconds` and `deep/light/rem/awake_sleep_seconds` (day, sleep range) | seconds | measured by device, staged by Garmin | `dailySleepDTO.*SleepSeconds` |
+| `workouts[]` / `activities[]`: `duration_seconds`, `distance_meters` | seconds, meters | measured | `duration`, `distance` |
+| `workouts[]` / `activities[]`: `average_heart_rate`, `max_heart_rate` | beats per minute | measured | `averageHR`, `maxHR` |
+| `workouts[]` / `activities[]`: `heart_rate_zone_N_seconds` | seconds | measured | `hrTimeInZone_N` |
+| `workouts[]` / `activities[]`: `start_time_local` | local time, no UTC offset | measured | `startTimeLocal` |
+| `rows[].resting_heart_rate` (health history) | beats per minute | measured | `restingHeartRate` |
+| `rows[].body_battery_*` (health history) | Body Battery points (0-100) | Garmin estimate | `charged`, `drained`, `bodyBatteryValuesArray` |
+
+Summaries (`summary` in range tools) count only tracked days or nights and
+return `null` averages and totals when nothing was tracked.
+
 ## No-wear day semantics
 
 Observed live on 2026-10-25 by scanning daily summaries for 2026-07-25 to
