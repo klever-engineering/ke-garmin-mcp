@@ -204,6 +204,76 @@ class CaloriesContractTests(unittest.TestCase):
         self.assertIsNone(result["summary"]["average_total_kilocalories"])
 
 
+NO_WEAR_DAY = "2026-08-19"
+# Recorded raw summary for a real no-wear day (2026-08-19, trimmed).
+NO_WEAR_SUMMARY = {
+    "calendarDate": NO_WEAR_DAY,
+    "totalSteps": None,
+    "totalDistanceMeters": 0,
+    "activeKilocalories": 0.0,
+    "bmrKilocalories": 2047.0,
+    "totalKilocalories": 2047.0,
+    "wellnessKilocalories": 2047.0,
+    "restingHeartRate": None,
+    "averageStressLevel": -1,
+    "sedentarySeconds": 86400,
+    "highlyActiveSeconds": 0,
+}
+
+
+def no_wear_api() -> mock.Mock:
+    api = empty_api()
+    api.get_user_summary.return_value = dict(NO_WEAR_SUMMARY)
+    api.get_body_battery.return_value = []
+    return api
+
+
+class NoWearDayContractTests(unittest.TestCase):
+    def test_day_overview_flags_no_wear_and_nulls_filler_zeros(self):
+        result = call("garmin_get_day_overview", NO_WEAR_DAY, api=no_wear_api())
+
+        self.assertIs(False, result["wear_data"])
+        self.assertIsNone(result["daily_summary"]["steps"])
+        self.assertIsNone(result["daily_summary"]["distance_meters"])
+        self.assertIsNone(result["daily_summary"]["active_kilocalories"])
+        self.assertIsNone(result["calories"]["active_kilocalories"])
+        self.assertEqual(2047, result["calories"]["total_kilocalories"])
+        self.assertEqual("bmr_only", result["calories"]["estimate"])
+
+    def test_worn_day_and_day_without_record_are_distinguished(self):
+        worn = call("garmin_get_day_overview", DAY, api=worn_api())
+        no_record = call("garmin_get_day_overview", DAY, api=empty_api())
+
+        self.assertIs(True, worn["wear_data"])
+        self.assertIsNone(worn["calories"]["estimate"])
+        self.assertIsNone(no_record["wear_data"])
+
+    def test_low_but_recorded_day_is_still_worn(self):
+        api = worn_api()
+        api.get_user_summary.return_value = {**NO_WEAR_SUMMARY, "totalSteps": 27, "totalDistanceMeters": 22}
+        result = call("garmin_get_day_overview", NO_WEAR_DAY, api=api)
+
+        self.assertIs(True, result["wear_data"])
+        self.assertEqual(22, result["daily_summary"]["distance_meters"])
+
+    def test_calories_exclude_no_wear_days_from_tracking(self):
+        dropped = call("garmin_get_calories", NO_WEAR_DAY, NO_WEAR_DAY, api=no_wear_api())
+        included = call("garmin_get_calories", NO_WEAR_DAY, NO_WEAR_DAY, include_empty=True, api=no_wear_api())
+
+        self.assertEqual([], dropped["rows"])
+        self.assertEqual(0, dropped["summary"]["tracked_days"])
+        self.assertIsNone(dropped["summary"]["average_total_kilocalories"])
+        row = included["rows"][0]
+        self.assertEqual((False, "bmr_only", None, 2047),
+                         (row["wear_data"], row["estimate"], row["active_kilocalories"], row["total_kilocalories"]))
+
+    def test_health_history_rows_carry_wear_flag(self):
+        result = call("garmin_get_health_history", NO_WEAR_DAY, NO_WEAR_DAY, api=no_wear_api())
+
+        self.assertIs(False, result["rows"][0]["wear_data"])
+        self.assertIsNone(result["rows"][0]["resting_heart_rate"])
+
+
 class ErrorEnvelopeContractTests(unittest.TestCase):
     RANGE_TOOLS = ("garmin_list_activities", "garmin_get_sleep_range", "garmin_get_calories",
                    "garmin_get_health_history")

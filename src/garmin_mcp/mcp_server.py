@@ -25,9 +25,10 @@ from opentelemetry.sdk.trace.export import (
 
 from .client import (
     GarminAuthError,
+    calories_has_data,
+    calories_row,
     compact_activity,
-    compact_calories,
-    compact_sleep_dto,
+    day_overview_payload,
     fetch_activities_range,
     fetch_calories_range,
     fetch_day_snapshot,
@@ -151,19 +152,7 @@ def garmin_get_day_overview(target_date: str = "") -> dict[str, Any]:
             _ = settings
             parsed_date = parse_date(target_date)
             snapshot = fetch_day_snapshot(api, parsed_date)
-            return {
-                "ok": True,
-                "calendar_date": snapshot.calendar_date,
-                "daily_summary": {
-                    "steps": snapshot.summary.get("totalSteps"),
-                    "distance_meters": snapshot.summary.get("totalDistanceMeters"),
-                    "active_kilocalories": snapshot.summary.get("activeKilocalories"),
-                    "resting_heart_rate": snapshot.summary.get("restingHeartRate"),
-                },
-                "calories": compact_calories(snapshot.summary),
-                "sleep": compact_sleep_dto(snapshot.sleep),
-                "workouts": [compact_activity(activity) for activity in snapshot.activities],
-            }
+            return {"ok": True, **day_overview_payload(snapshot)}
         except Exception as exc:
             return _handle_known_errors(exc)
 
@@ -304,22 +293,7 @@ def garmin_get_calories(
                 start_date, end_date, max_days=settings.max_range_days
             )
             rows = fetch_calories_range(api, start, end)
-            table: list[dict[str, Any]] = []
-            for row in rows:
-                has_data = bool(row.total_kilocalories or row.active_kilocalories)
-                if not include_empty and not has_data:
-                    continue
-                table.append(
-                    {
-                        "calendar_date": row.calendar_date,
-                        "total_kilocalories": row.total_kilocalories,
-                        "active_kilocalories": row.active_kilocalories,
-                        "bmr_kilocalories": row.bmr_kilocalories,
-                        "wellness_kilocalories": row.wellness_kilocalories,
-                        "consumed_kilocalories": row.consumed_kilocalories,
-                        "remaining_kilocalories": row.remaining_kilocalories,
-                    }
-                )
+            table = [calories_row(row) for row in rows if include_empty or calories_has_data(row)]
 
             return {
                 "ok": True,

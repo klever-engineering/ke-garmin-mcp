@@ -28,6 +28,8 @@ class CaloriesDay:
     consumed_kilocalories: int | None
     remaining_kilocalories: int | None
     source_payload: dict[str, Any]
+    wear_data: bool | None = None
+    estimate: str | None = None
 
 
 @dataclass(slots=True)
@@ -127,6 +129,41 @@ def compact_sleep_dto(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+FULL_DAY_SECONDS = 24 * 60 * 60
+
+
+def wear_data_status(summary: dict[str, Any] | None) -> bool | None:
+    """Classify a Garmin daily summary by whether the watch recorded the day.
+
+    True: the device recorded the day (steps are present, even if few).
+    False: Garmin's filler for a day without wear data. Observed 2026-10-25 on
+        real no-wear days: totalSteps is null, averageStressLevel is -1 and
+        sedentarySeconds is 86400, while distance and active kcal are 0 and the
+        calorie total is only the BMR estimate. See README "No-wear day semantics".
+    None: no Garmin record for the date (for example before any device).
+    """
+    if not isinstance(summary, dict):
+        return None
+    if summary.get("totalSteps") is not None:
+        return True
+    if summary.get("averageStressLevel") == -1 or summary.get("sedentarySeconds") == FULL_DAY_SECONDS:
+        return False
+    return None
+
+
+def compact_daily_summary(summary: dict[str, Any] | None) -> dict[str, Any]:
+    summary = summary if isinstance(summary, dict) else {}
+    # On a no-wear day Garmin reports 0 distance and 0 active kcal; those are
+    # not measurements, so return them as missing.
+    measured = wear_data_status(summary) is not False
+    return {
+        "steps": summary.get("totalSteps"),
+        "distance_meters": summary.get("totalDistanceMeters") if measured else None,
+        "active_kilocalories": summary.get("activeKilocalories") if measured else None,
+        "resting_heart_rate": summary.get("restingHeartRate"),
+    }
+
+
 def _coerce_kcal(value: Any) -> int | None:
     if isinstance(value, bool):
         return None
@@ -137,10 +174,15 @@ def _coerce_kcal(value: Any) -> int | None:
 
 def compact_calories(summary: dict[str, Any] | None) -> dict[str, Any]:
     summary = summary if isinstance(summary, dict) else {}
+    wear_data = wear_data_status(summary)
+    no_wear = wear_data is False
     return {
         "calendar_date": summary.get("calendarDate"),
+        "wear_data": wear_data,
+        # On a no-wear day the total is Garmin's BMR estimate, not a measurement.
+        "estimate": "bmr_only" if no_wear else None,
         "total_kilocalories": _coerce_kcal(summary.get("totalKilocalories")),
-        "active_kilocalories": _coerce_kcal(summary.get("activeKilocalories")),
+        "active_kilocalories": None if no_wear else _coerce_kcal(summary.get("activeKilocalories")),
         "bmr_kilocalories": _coerce_kcal(summary.get("bmrKilocalories")),
         "wellness_kilocalories": _coerce_kcal(summary.get("wellnessKilocalories")),
         "consumed_kilocalories": _coerce_kcal(summary.get("consumedKilocalories")),
@@ -166,14 +208,35 @@ def fetch_calories_range(api: Garmin, start: date, end: date) -> list[CaloriesDa
                 consumed_kilocalories=compact["consumed_kilocalories"],
                 remaining_kilocalories=compact["remaining_kilocalories"],
                 source_payload=summary_dict,
+                wear_data=compact["wear_data"],
+                estimate=compact["estimate"],
             )
         )
         cursor += timedelta(days=1)
     return rows
 
 
+def calories_has_data(row: CaloriesDay) -> bool:
+    """A day counts as tracked only if it was worn and has calorie values."""
+    return row.wear_data is not False and bool(row.total_kilocalories or row.active_kilocalories)
+
+
+def calories_row(row: CaloriesDay) -> dict[str, Any]:
+    return {
+        "calendar_date": row.calendar_date,
+        "wear_data": row.wear_data,
+        "estimate": row.estimate,
+        "total_kilocalories": row.total_kilocalories,
+        "active_kilocalories": row.active_kilocalories,
+        "bmr_kilocalories": row.bmr_kilocalories,
+        "wellness_kilocalories": row.wellness_kilocalories,
+        "consumed_kilocalories": row.consumed_kilocalories,
+        "remaining_kilocalories": row.remaining_kilocalories,
+    }
+
+
 def summarize_calories(rows: list[CaloriesDay]) -> dict[str, Any]:
-    tracked = [row for row in rows if row.total_kilocalories or row.active_kilocalories]
+    tracked = [row for row in rows if calories_has_data(row)]
     if not tracked:
         return {
             "tracked_days": 0,
@@ -211,6 +274,18 @@ def fetch_day_snapshot(api: Garmin, target_date: date) -> DaySnapshot:
     )
 
 
+def day_overview_payload(snapshot: DaySnapshot) -> dict[str, Any]:
+    """Shape one day for agents; shared by the CLI and the MCP tool."""
+    return {
+        "calendar_date": snapshot.calendar_date,
+        "wear_data": wear_data_status(snapshot.summary),
+        "daily_summary": compact_daily_summary(snapshot.summary),
+        "calories": compact_calories(snapshot.summary),
+        "sleep": compact_sleep_dto(snapshot.sleep),
+        "workouts": [compact_activity(activity) for activity in snapshot.activities],
+    }
+
+
 def fetch_health_range(api: Garmin, start: date, end: date) -> list[dict[str, Any]]:
     """Fetch daily resting HR and Body Battery charged/drained for an inclusive range."""
     battery_rows = api.get_body_battery(start.isoformat(), end.isoformat())
@@ -234,6 +309,7 @@ def fetch_health_range(api: Garmin, start: date, end: date) -> list[dict[str, An
         ]
         rows.append({
             "calendar_date": day,
+            "wear_data": wear_data_status(summary),
             "resting_heart_rate": summary.get("restingHeartRate"),
             "body_battery_charged": battery.get("charged"),
             "body_battery_drained": battery.get("drained"),

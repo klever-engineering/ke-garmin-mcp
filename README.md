@@ -88,7 +88,7 @@ PYTHONPATH=src python -m garmin_mcp.mcp_server --transport stdio
 ```
 
 Exposed tools:
-- `garmin_get_day_overview(target_date="")` — omit `target_date` for the server's current local date, resolved on each call.
+- `garmin_get_day_overview(target_date="")` — omit `target_date` for the server's current local date, resolved on each call. Includes `wear_data` (see [No-wear day semantics](#no-wear-day-semantics)).
 - `garmin_get_health_history(start_date, end_date)` — daily resting heart rate and Body Battery charged/drained/start/end values, coverage, averages, and first-week versus last-week changes (date-range cap: `GARMIN_MAX_RANGE_DAYS`, default 93).
 - `garmin_list_activities(start_date, end_date, activity_type="")`
 - `garmin_get_sleep_range(start_date, end_date, include_empty=false)`
@@ -105,13 +105,23 @@ Observed live on 2026-10-25 by scanning daily summaries for 2026-07-25 to
 | Before any device | 2012-01-15 | null | null | null | null | null | null |
 
 Garmin fills a no-wear day with zeros and a profile-based BMR estimate rather
-than nulls. The raw summary identifies it: `totalSteps` is null,
-`averageStressLevel` is -1, and `sedentarySeconds` is 86400. The MCP currently
-passes those values through, so on a no-wear day `distance_meters: 0`,
-`active_kilocalories: 0` and `total_kilocalories: 2047` are **not**
-measurements. Until this is normalized, treat `steps: null` as "no wear data"
-for the whole day. Dates with no Garmin record at all return null for every
-field (covered by `tests/test_contract.py`).
+than nulls. The raw summary identifies it: `totalSteps` is null and
+`averageStressLevel` is -1 or `sedentarySeconds` is 86400.
+
+The MCP normalizes this (`wear_data_status` in `src/garmin_mcp/client.py`):
+
+- `wear_data` on the day overview, calorie rows and health-history rows:
+  `true` (the device recorded the day, even with few steps), `false` (no-wear
+  filler day), or `null` (no Garmin record for the date).
+- On a no-wear day, `distance_meters` and `active_kilocalories` are `null`,
+  not 0. `total_kilocalories` keeps Garmin's value, with
+  `calories.estimate: "bmr_only"` to mark it as an estimate rather than a
+  measurement.
+- No-wear days are not counted as tracked calorie days and are excluded from
+  calorie averages. They appear in calorie rows only with `include_empty=true`.
+
+Dates with no Garmin record at all return null for every field. Both cases are
+covered by `tests/test_contract.py`.
 
 ## Docker
 
