@@ -1,10 +1,16 @@
 PYTHON := .venv/bin/python
 PIP := .venv/bin/pip
 
-.PHONY: bootstrap test run-cli run-mcp docker-build docker-run verify-outputs
+.PHONY: bootstrap lock test run-cli run-mcp docker-build docker-run verify-outputs
 
 bootstrap:
 	./scripts/bootstrap.sh
+
+# Re-resolve uv.lock from pyproject.toml and regenerate requirements.txt.
+# Never edit requirements.txt by hand.
+lock:
+	uv lock
+	uv export --quiet --format requirements-txt --no-emit-project --no-dev -o requirements.txt
 
 # Unit tests. Override PYTHON in CI (e.g. `make test PYTHON=python`).
 test:

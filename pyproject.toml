@@ -3,15 +3,20 @@ name = "garmin-mcp"
 version = "0.1.0"
 description = "Local Garmin Connect phase-1 connector (sleep, workouts, daily metrics)."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
+# Direct dependencies only, as compatible ranges. Exact versions (including
+# transitive ones such as curl_cffi, garminconnect's auth transport) are pinned
+# in uv.lock; requirements.txt is generated from it. See docs/ADR/0005.
 dependencies = [
-  "garminconnect==0.2.38",
-  "mcp==1.26.0",
-  "opentelemetry-api==1.38.0",
-  "opentelemetry-exporter-otlp-proto-http==1.38.0",
-  "opentelemetry-sdk==1.38.0",
-  "python-dotenv==1.2.2",
-  "typer==0.24.1",
+  "garminconnect>=0.3.20,<0.4",
+  # mcp 2.x renames FastMCP to MCPServer; migration tracked separately (ADR 0005).
+  "mcp>=1.30.0,<2",
+  "opentelemetry-api>=1.45.1,<2",
+  "opentelemetry-exporter-otlp-proto-http>=1.45.1,<2",
+  "opentelemetry-sdk>=1.45.1,<2",
+  "python-dotenv>=1.2.4,<2",
+  "requests>=2.33.0,<3",
+  "typer>=0.27.3,<1",
 ]
 
 [project.scripts]

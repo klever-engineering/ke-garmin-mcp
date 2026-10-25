@@ -103,11 +103,19 @@ def validate_date_range(start_date: str, end_date: str, *, max_days: int) -> tup
 
 
 def login(settings: Settings, force_credentials: bool = False) -> Garmin:
-    api = Garmin(email=settings.garmin_username, password=settings.garmin_password)
+    """Log in with saved tokens, using credentials only for token problems.
+
+    garminconnect >= 0.3 falls back to a credential login on its own whenever
+    it was given credentials and the token login fails for any reason. To keep
+    that decision here (see is_token_problem), the token attempt uses a client
+    without credentials. Retries are disabled in the library because
+    session.RetryingGarmin owns the retry budget.
+    """
     tokenstore = str(settings.garmin_tokens_dir)
 
     if not force_credentials:
         try:
+            api = Garmin(retry_attempts=0)
             api.login(tokenstore=tokenstore)
             return api
         except Exception as exc:
@@ -121,9 +129,15 @@ def login(settings: Settings, force_credentials: bool = False) -> Garmin:
             "GARMIN_USERNAME/GARMIN_PASSWORD are required for first login."
         )
 
-    api.login()
     settings.garmin_tokens_dir.mkdir(parents=True, exist_ok=True)
-    api.garth.dump(tokenstore)
+    api = Garmin(
+        email=settings.garmin_username,
+        password=settings.garmin_password,
+        retry_attempts=0,
+    )
+    # With a tokenstore path, garminconnect saves the new tokens there
+    # (garmin_tokens.json) after the credential login.
+    api.login(tokenstore=tokenstore)
     return api
 
 

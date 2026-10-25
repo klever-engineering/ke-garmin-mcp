@@ -100,7 +100,7 @@ class RetryingGarminTests(unittest.TestCase):
         with self.assertRaises(GarminConnectAuthenticationError):
             proxy.get_user_summary("2026-10-24")
         self.assertEqual(1, api.get_user_summary.call_count)
-        self.assertIs(api.garth, proxy.garth)
+        self.assertIs(api.display_name, proxy.display_name)
         sleep.assert_not_called()
 
     def test_tool_survives_one_rate_limit(self, sleep):
@@ -118,27 +118,41 @@ class RetryingGarminTests(unittest.TestCase):
 
 class LoginFallbackTests(unittest.TestCase):
     def _login(self, token_error):
-        instance = mock.Mock()
-        instance.login.side_effect = lambda tokenstore=None: (_ for _ in ()).throw(token_error) if tokenstore else None
-        with mock.patch.object(client, "Garmin", return_value=instance):
+        """Token-only clients fail with token_error; credential clients succeed."""
+        created = []
+
+        def factory(*args, **kwargs):
+            instance = mock.Mock()
+            instance.has_credentials = bool(kwargs.get("email") or args)
+            if not instance.has_credentials:
+                instance.login.side_effect = token_error
+            created.append(instance)
+            return instance
+
+        with mock.patch.object(client, "Garmin", side_effect=factory):
             try:
                 client.login(settings())
-                return instance, None
+                return created, None
             except Exception as exc:  # noqa: BLE001
-                return instance, exc
+                return created, exc
 
-    def credential_logins(self, instance) -> int:
-        return sum(1 for c in instance.login.call_args_list if not c.kwargs.get("tokenstore"))
+    def credential_logins(self, created) -> int:
+        return sum(1 for i in created if i.has_credentials and i.login.called)
+
+    def test_token_attempt_has_no_credentials_and_library_retries_are_off(self):
+        created, exc = self._login(GarminConnectConnectionError("network down"))
+        self.assertIsInstance(exc, GarminConnectConnectionError)
+        self.assertFalse(created[0].has_credentials)
 
     def test_missing_tokens_use_credentials(self):
-        instance, exc = self._login(FileNotFoundError("oauth1_token.json"))
+        created, exc = self._login(FileNotFoundError("oauth1_token.json"))
         self.assertIsNone(exc)
-        self.assertEqual(1, self.credential_logins(instance))
+        self.assertEqual(1, self.credential_logins(created))
 
     def test_rejected_tokens_use_credentials(self):
-        instance, exc = self._login(GarminConnectAuthenticationError("401 Unauthorized"))
+        created, exc = self._login(GarminConnectAuthenticationError("401 Unauthorized"))
         self.assertIsNone(exc)
-        self.assertEqual(1, self.credential_logins(instance))
+        self.assertEqual(1, self.credential_logins(created))
 
     def test_corrupt_token_file_uses_credentials(self):
         try:
@@ -147,19 +161,19 @@ class LoginFallbackTests(unittest.TestCase):
             except json.JSONDecodeError as inner:
                 raise GarminConnectConnectionError("Login failed") from inner
         except GarminConnectConnectionError as wrapped:
-            instance, exc = self._login(wrapped)
+            created, exc = self._login(wrapped)
         self.assertIsNone(exc)
-        self.assertEqual(1, self.credential_logins(instance))
+        self.assertEqual(1, self.credential_logins(created))
 
     def test_connection_error_is_raised_without_password_login(self):
-        instance, exc = self._login(GarminConnectConnectionError("network down"))
+        created, exc = self._login(GarminConnectConnectionError("network down"))
         self.assertIsInstance(exc, GarminConnectConnectionError)
-        self.assertEqual(0, self.credential_logins(instance))
+        self.assertEqual(0, self.credential_logins(created))
 
     def test_rate_limit_is_raised_without_password_login(self):
-        instance, exc = self._login(GarminConnectTooManyRequestsError("429"))
+        created, exc = self._login(GarminConnectTooManyRequestsError("429"))
         self.assertIsInstance(exc, GarminConnectTooManyRequestsError)
-        self.assertEqual(0, self.credential_logins(instance))
+        self.assertEqual(0, self.credential_logins(created))
 
     def test_auth_error_caused_by_network_is_raised_without_password_login(self):
         try:
@@ -168,9 +182,9 @@ class LoginFallbackTests(unittest.TestCase):
             except requests.exceptions.ConnectionError as inner:
                 raise GarminConnectAuthenticationError("Failed to retrieve profile") from inner
         except GarminConnectAuthenticationError as wrapped:
-            instance, exc = self._login(wrapped)
+            created, exc = self._login(wrapped)
         self.assertIsInstance(exc, GarminConnectAuthenticationError)
-        self.assertEqual(0, self.credential_logins(instance))
+        self.assertEqual(0, self.credential_logins(created))
 
 
 if __name__ == "__main__":

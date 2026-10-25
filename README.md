@@ -5,14 +5,24 @@ Local Garmin Connect integration with:
 - MCP server tools callable by agents over `stdio`
 - Docker packaging for portable execution
 
-## Dependencies (latest stable, verified)
+## Dependencies
 
-- `garminconnect==0.2.38`
-- `mcp==1.26.0`
-- `python-dotenv==1.2.2`
-- `typer==0.24.1`
+Direct dependencies are declared once, as ranges, in `pyproject.toml`.
+`uv.lock` pins every package; `requirements.txt` is generated from it (with
+hashes) for pip, Docker and CI. Do not edit `requirements.txt` by hand:
 
-Note: `garminconnect` currently constrains `garth` to `<0.6.0`. Resolver will install a compatible stable release.
+```bash
+make lock   # re-resolve uv.lock and regenerate requirements.txt
+```
+
+Current lock: `garminconnect` 0.3.20 (Garmin SSO via `curl_cffi`; no longer
+uses `garth`), `mcp` 1.30.0 (pinned `<2`, see
+[ADR 0005](docs/ADR/0005-dependency-locking-and-mcp-2-deferral.md)), Python 3.12+.
+
+Upgrading from `garminconnect` 0.2.x: old garth tokens (`oauth1_token.json`,
+`oauth2_token.json`) cannot be read. Run `lifeos.garmin-cli login` once; it
+performs one credential login and saves `garmin_tokens.json` in the token
+directory.
 
 ## Bootstrap (local)
 

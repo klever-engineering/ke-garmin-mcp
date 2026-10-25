@@ -1,6 +1,8 @@
 version: 2
 updates:
-  - package-ecosystem: "pip"
+  # uv.lock is the source of exact versions (ADR 0005); requirements.txt is
+  # generated from it with `make lock`.
+  - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "weekly"
@@ -9,3 +11,7 @@ updates:
         applies-to: security-updates
         patterns:
           - "*"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
