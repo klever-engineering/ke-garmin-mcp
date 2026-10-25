@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Observe whether this Track's LifeOS expected outputs are accomplished.
 
-Each LifeOS expected output for the Garmin MCP Track (GitHub issues #6-#18) has
+Each LifeOS expected output for the Garmin MCP Track (GitHub issues #6-#18 and #22) has
 a done-when criterion. This script checks every criterion directly against the
 repository, the test suites, GitHub CI, the running service, and behavior
 probes against a fake Garmin client, so an agent or the owner can see the
@@ -66,6 +66,7 @@ OUTPUT_IDS = {
     16: "0f678da0-b8da-43b5-9a13-c99afa373a71",
     17: "246b0c50-3332-46a9-9602-bf0c88d425ca",
     18: "004c4e83-a638-49dd-b11a-f77bbfca1d28",
+    22: "2b552b47-bf95-4bc5-82df-2d4e358cc723",
 }
 
 
@@ -168,6 +169,10 @@ def probe(name: str, timeout: int = 120) -> Check:
 
 
 def mcp_call(tool: str, args: dict, timeout: int = 90) -> dict:
+    return mcp_request("tools/call", {"name": tool, "arguments": args}, timeout)
+
+
+def mcp_request(method: str, params: dict, timeout: int = 90) -> dict:
     def post(message: dict, headers: dict) -> tuple[dict, dict]:
         req = urllib.request.Request(SERVER_URL, data=json.dumps(message).encode(), method="POST", headers={
             "Accept": "application/json, text/event-stream", "Content-Type": "application/json", **headers})
@@ -184,9 +189,10 @@ def mcp_call(tool: str, args: dict, timeout: int = 90) -> dict:
         "clientInfo": {"name": "verify-expected-outputs", "version": "1"}}}, {})
     session = {"mcp-session-id": hdrs.get("mcp-session-id", ""),
                "mcp-protocol-version": init.get("result", {}).get("protocolVersion", "2025-03-26")}
-    msg, _ = post({"jsonrpc": "2.0", "id": "call", "method": "tools/call",
-                   "params": {"name": tool, "arguments": args}}, session)
+    msg, _ = post({"jsonrpc": "2.0", "id": "call", "method": method, "params": params}, session)
     result = msg.get("result") or {}
+    if method != "tools/call":
+        return result
     if isinstance(result.get("structuredContent"), dict):
         return result["structuredContent"]
     for item in result.get("content", []):
@@ -423,7 +429,23 @@ def out_13(ctx: Ctx) -> list[Check]:
            f"both {cfg_default.group(1) if cfg_default else None}",
            f"config={cfg_default.group(1) if cfg_default else None} example={example.group(1) if example else None}"),
         readme_heading("README configuration reference", r"configuration"),
+        _token_permissions(candidates),
+        ok("no legacy garth token files", not any((p / "oauth1_token.json").exists() for p in candidates),
+           "no oauth1_token.json/oauth2_token.json left", "old garth token files still present (unused since garminconnect 0.3)"),
     ]
+
+
+def _token_permissions(candidates: list[Path]) -> Check:
+    """Token files must be readable by their owner only (dir 700, files 600)."""
+    loose = []
+    for directory in candidates:
+        if not directory.is_dir():
+            continue
+        for path in [directory, *directory.glob("*.json")]:
+            if path.stat().st_mode & 0o077:
+                loose.append(f"{path.relative_to(WORKSPACE) if path.is_relative_to(WORKSPACE) else path}={oct(path.stat().st_mode & 0o777)}")
+    return ok("token files readable by owner only", not loose, "token dir 700 / files 600",
+              f"group/other can read: {loose[:4]} (NTFS/fuseblk mounts ignore chmod)")
 
 
 def out_14(ctx: Ctx) -> list[Check]:
@@ -484,6 +506,30 @@ def out_17(ctx: Ctx) -> list[Check]:
     ]
 
 
+def out_22(ctx: Ctx) -> list[Check]:
+    lock = read(ROOT / "uv.lock")
+    mcp_ver = re.search(r'name = "mcp"\nversion = "([^"]+)"', lock)
+    ver = mcp_ver.group(1) if mcp_ver else "?"
+    server = read(ROOT / "src" / "garmin_mcp" / "mcp_server.py")
+    adr = read(ROOT / "docs" / "ADR" / "0005-dependency-locking-and-mcp-2-deferral.md")
+
+    def tools_listed() -> Check:
+        names = sorted(t["name"] for t in mcp_request("tools/list", {}).get("tools", []))
+        return ok("live service lists all 5 tools", len(names) == 5, f"tools: {names}", f"tools: {names}")
+
+    return [
+        ok("mcp 2.x locked", ver.startswith("2."), f"uv.lock mcp {ver}", f"uv.lock mcp {ver}"),
+        ok("server no longer uses FastMCP", "mcp.server.fastmcp" not in server, "mcp_server.py imports MCPServer",
+           "mcp_server.py still imports mcp.server.fastmcp"),
+        unit_tests(ctx),
+        ci_on_main(ctx),
+        live(ctx, "live service lists all 5 tools", tools_listed),
+        ldr_live_status(ctx),
+        ok("ADR 0005 deferral marked superseded", re.search(r"supersed", adr, re.I) is not None,
+           "ADR 0005 marked superseded", "ADR 0005 still records the deferral as current"),
+    ]
+
+
 def out_18(ctx: Ctx) -> list[Check]:
     def live_flag() -> Check:
         got = mcp_call("garmin_get_day_overview", {"target_date": NO_WEAR_DAY})
@@ -534,6 +580,7 @@ OUTPUTS = {
     16: ("HTTP access-point ADR, versioning and CHANGELOG", out_16),
     17: ("Access model and client authentication", out_17),
     18: ("No-wear days flagged instead of reported as zeros", out_18),
+    22: ("MCP server migrated to mcp 2.x", out_22),
 }
 
 
