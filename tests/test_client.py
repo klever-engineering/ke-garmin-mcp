@@ -74,6 +74,34 @@ class HealthHistoryToolTests(unittest.TestCase):
         self.assertEqual("validation_error", result["error"])
 
 
+class DayOverviewDefaultDateTests(unittest.TestCase):
+    def _call(self, today: date, **kwargs):
+        from garmin_mcp.client import DaySnapshot
+
+        fake_date = Mock(wraps=date)
+        fake_date.today.return_value = today
+        fetch = Mock(side_effect=lambda _api, d: DaySnapshot(d.isoformat(), {}, {}, []))
+        with unittest.mock.patch.object(mcp_server, "date", fake_date), \
+                unittest.mock.patch.object(mcp_server, "_get_api", return_value=(None, object())), \
+                unittest.mock.patch.object(mcp_server, "fetch_day_snapshot", fetch):
+            return mcp_server.garmin_get_day_overview(**kwargs)
+
+    def test_default_date_resolves_at_call_time_not_import_time(self):
+        self.assertEqual("2031-01-02", self._call(date(2031, 1, 2))["calendar_date"])
+        self.assertEqual("2031-01-03", self._call(date(2031, 1, 3))["calendar_date"])
+
+    def test_explicit_date_wins_and_missing_values_stay_null(self):
+        result = self._call(date(2031, 1, 2), target_date="2026-10-01")
+        self.assertEqual("2026-10-01", result["calendar_date"])
+        self.assertIsNone(result["daily_summary"]["steps"])
+        self.assertIsNone(result["sleep"]["sleep_time_seconds"])
+
+    def test_errors_are_reported_as_ok_false_envelope(self):
+        result = self._call(date(2031, 1, 2), target_date="not-a-date")
+        self.assertFalse(result["ok"])
+        self.assertEqual("validation_error", result["error"])
+
+
 class CompactActivityTests(unittest.TestCase):
     def test_preserves_zone_seconds_and_missing_is_not_zero(self):
         result = compact_activity({"activityId": 1, "hrTimeInZone_3": 60, "hrTimeInZone_4": 0})

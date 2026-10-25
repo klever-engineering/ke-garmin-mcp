@@ -132,9 +132,15 @@ def _handle_known_errors(exc: Exception) -> dict[str, Any]:
 
 @mcp.tool(
     name="garmin_get_day_overview",
-    description="Get sleep, workouts, and daily summary for one date.",
+    description=(
+        "Get sleep, workouts, and daily summary for one date (YYYY-MM-DD). "
+        "Omit target_date for the server's current local date."
+    ),
 )
-def garmin_get_day_overview(target_date: str = date.today().isoformat()) -> dict[str, Any]:
+def garmin_get_day_overview(target_date: str = "") -> dict[str, Any]:
+    # Resolve "today" per call: the HTTP service runs for days, so a default
+    # computed at import time would keep returning the service start date.
+    target_date = target_date.strip() or date.today().isoformat()
     with _span("garmin_get_day_overview"):
         try:
             _set_span_attrs(
