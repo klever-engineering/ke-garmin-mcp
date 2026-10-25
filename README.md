@@ -36,6 +36,17 @@ Optional:
 - `GARMIN_MAX_RANGE_DAYS` (default: `93`)
 - `GARMIN_ENV_FILE` (explicit env file path)
 
+## Tests
+
+```bash
+make test
+```
+
+`make test` runs the unit tests with the project venv. After `./scripts/bootstrap.sh`
+the package is installed in editable mode, so `python -m unittest discover -s tests`
+also works without setting `PYTHONPATH`. GitHub Actions runs the same target on
+every push to `main` and on every pull request (`.github/workflows/tests.yml`).
+
 ## CLI
 
 ```bash

@@ -22,5 +22,7 @@ fi
 . .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
+# Editable install so tests and tools import garmin_mcp without PYTHONPATH.
+python -m pip install --no-deps -e .
 
 echo "Bootstrap complete. Run: source .venv/bin/activate"

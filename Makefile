@@ -1,10 +1,14 @@
 PYTHON := .venv/bin/python
 PIP := .venv/bin/pip
 
-.PHONY: bootstrap run-cli run-mcp docker-build docker-run verify-outputs
+.PHONY: bootstrap test run-cli run-mcp docker-build docker-run verify-outputs
 
 bootstrap:
 	./scripts/bootstrap.sh
+
+# Unit tests. Override PYTHON in CI (e.g. `make test PYTHON=python`).
+test:
+	LIFEOS_OTEL_DISABLE_OTLP=1 PYTHONPATH=src $(PYTHON) -m unittest discover -s tests -v
 
 run-cli:
 	PYTHONPATH=src $(PYTHON) -m garmin_mcp.cli --help
