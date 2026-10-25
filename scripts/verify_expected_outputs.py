@@ -38,6 +38,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE = ROOT.parents[2]
 LDR_DIR = Path(os.getenv("LDR_DIR", ROOT.parent.parent / "tools" / "life-daily-report"))
+SESSIONS_DIR = Path(os.getenv("LIFEOS_SESSIONS_DIR", WORKSPACE / "workspaces" / "lifeos-sessions"))
 VENV_PYTHON = ROOT / ".venv" / "bin" / "python"
 SERVER_URL = os.getenv("GARMIN_MCP_URL", "http://127.0.0.1:8000/mcp")
 LIFEOS_URL = os.getenv("LIFEOS_URL", "http://127.0.0.1:8765")
@@ -510,13 +511,30 @@ def out_17(ctx: Ctx) -> list[Check]:
                 return Check("unauthenticated request rejected", "FAIL", f"HTTP {resp.status}: accepted without credential")
         except urllib.error.HTTPError as exc:
             return ok("unauthenticated request rejected", exc.code in (401, 403), f"HTTP {exc.code}")
-    consumer = read(LDR_DIR / "src" / "life_daily_report" / "sources" / "garmin.py")
+    def refresh_after_restart() -> Check:
+        """The lifeos-sessions refresh must have succeeded since the server last started."""
+        _, out = run(["systemctl", "--user", "show", "lifeos-garmin-refresh.service", "-p", "Result",
+                      "-p", "ExecMainExitTimestampMonotonic"])
+        _, srv = run(["systemctl", "--user", "show", SERVICE, "-p", "ExecMainStartTimestampMonotonic"])
+        props = dict(line.split("=", 1) for line in (out + "\n" + srv).splitlines() if "=" in line)
+        ran_after = int(props.get("ExecMainExitTimestampMonotonic") or 0) > int(props.get("ExecMainStartTimestampMonotonic") or 0)
+        good = props.get("Result") == "success" and ran_after
+        return ok("lifeos-sessions refresh succeeded since the server restarted", good,
+                  "last lifeos-garmin-refresh run succeeded after the current server start",
+                  f"result={props.get('Result')}; ran after server start={ran_after} (wait for the 6-hourly timer)")
+
+    ldr = read(LDR_DIR / "src" / "life_daily_report" / "sources" / "garmin.py")
+    sessions = read(SESSIONS_DIR / "src" / "lifeos_sessions" / "garmin_signals.py")
     return [
         accepted_adr("access-model ADR", r"access model"),
         live(ctx, "unauthenticated request rejected", unauth_rejected),
-        ok("consumer sends a credential", "Authorization" in consumer, "life-daily-report sets Authorization",
+        ok("life-daily-report sends a credential", "Authorization" in ldr, "life-daily-report sets Authorization",
            "life-daily-report Garmin source sends no Authorization header"),
+        ok("lifeos-sessions refresh sends a credential", "Authorization" in sessions,
+           "lifeos-sessions garmin_signals sets Authorization",
+           "lifeos-sessions garmin_signals.py sends no Authorization header"),
         ldr_live_status(ctx),
+        live(ctx, "lifeos-sessions refresh succeeded since the server restarted", refresh_after_restart),
     ]
 
 
