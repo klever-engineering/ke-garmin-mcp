@@ -6,6 +6,10 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    ignore:
+      # mcp 2.x is a code migration (FastMCP -> MCPServer), tracked in #22.
+      - dependency-name: "mcp"
+        update-types: ["version-update:semver-major"]
     groups:
       security-updates:
         applies-to: security-updates
