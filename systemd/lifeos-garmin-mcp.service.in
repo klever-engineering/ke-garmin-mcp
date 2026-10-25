@@ -1,0 +1,17 @@
+# Template: scripts/install-user-service.sh replaces @PROJECT_DIR@ with this
+# checkout's absolute path and installs the result as a systemd user unit.
+[Unit]
+Description=LifeOS Garmin MCP Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=@PROJECT_DIR@
+ExecStart=@PROJECT_DIR@/scripts/mcp_streamable_http.sh
+Restart=always
+RestartSec=10
+UMask=0077
+
+[Install]
+WantedBy=default.target

@@ -1,7 +1,7 @@
 PYTHON := .venv/bin/python
 PIP := .venv/bin/pip
 
-.PHONY: bootstrap lock test run-cli run-mcp docker-build docker-run verify-outputs
+.PHONY: bootstrap lock test install-service run-cli run-mcp docker-build docker-run verify-outputs
 
 bootstrap:
 	./scripts/bootstrap.sh
@@ -31,3 +31,7 @@ docker-run:
 # Observe whether the Track's LifeOS expected outputs are accomplished (read-only).
 verify-outputs:
 	python3 scripts/verify_expected_outputs.py
+
+# Install or update the systemd user service for this checkout (docs/runbook.md).
+install-service:
+	./scripts/install-user-service.sh

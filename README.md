@@ -242,21 +242,27 @@ docker compose build
 docker compose run --rm garmin-mcp
 ```
 
-## 24/7 user service
-
-Checked-in user unit:
+Run the streamable-HTTP server in Docker instead (the production path is the
+systemd user service; this is for portable or test setups). Bind the
+published port to localhost only, since the server has no client
+authentication yet (#17):
 
 ```bash
-systemd/lifeos-garmin-mcp.service
+docker run --rm -p 127.0.0.1:8000:8000 \
+  --env-file .env -e FASTMCP_HOST=0.0.0.0 -e FASTMCP_PORT=8000 \
+  -e GARMIN_TOKENS_DIR=/data/config/garmin-mcp/tokens \
+  -v "$(pwd)/../../../config:/data/config" \
+  lifeos.garmin-mcp:local --transport streamable-http
 ```
 
-Install and enable:
+## 24/7 user service
+
+The unit is a template, `systemd/lifeos-garmin-mcp.service.in`, with no
+machine paths. Install, update and roll back with
+[docs/runbook.md](docs/runbook.md); the short version:
 
 ```bash
-mkdir -p ~/.config/systemd/user
-cp systemd/lifeos-garmin-mcp.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now lifeos-garmin-mcp.service
+./scripts/install-user-service.sh   # render for this checkout, enable, (re)start
 ```
 
 Verification:
