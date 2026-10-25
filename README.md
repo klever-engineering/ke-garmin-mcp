@@ -31,20 +31,39 @@ cd repositories/mcps/garmin-mcp
 ./scripts/bootstrap.sh
 ```
 
-## Environment
+## Configuration
 
-The runtime loads `.env` from:
-1. `repositories/mcps/garmin-mcp/.env` (if present)
-2. workspace root `.env` (`../../.env`) via `scripts/mcp_stdio.sh`
+All settings are resolved in one place, `src/garmin_mcp/config.py`. The
+launch scripts do not read `.env` themselves; they only `cd` into the project
+directory, so resolution is the same for the systemd service, stdio clients
+and the CLI.
 
-Required:
-- `GARMIN_USERNAME`
-- `GARMIN_PASSWORD`
+**`.env` loading order** (the first match wins; only that one file is read,
+and values already set in the process environment are never overridden):
 
-Optional:
-- `GARMIN_TOKENS_DIR` (default: `config/garmin-mcp/tokens`, resolved from the workspace root)
-- `GARMIN_MAX_RANGE_DAYS` (default: `93`)
-- `GARMIN_ENV_FILE` (explicit env file path)
+1. `GARMIN_ENV_FILE`, if set (an absolute path; if the file does not exist,
+   no `.env` is loaded);
+2. otherwise the nearest `.env` walking up from the working directory: the
+   project's own `repositories/mcps/garmin-mcp/.env` if present, else the
+   workspace root `.env`.
+
+Settings are read once per server process; restart the service after changes
+(`./scripts/install-user-service.sh`).
+
+| Variable | Required | Default | Meaning |
+|---|---|---|---|
+| `GARMIN_USERNAME`, `GARMIN_PASSWORD` | for the first login and when saved tokens are rejected | none | Garmin Connect credentials |
+| `GARMIN_TOKENS_DIR` | no | `config/garmin-mcp/tokens` | Token directory; relative paths resolve from the workspace root (the folder containing `config/` and `repositories/`) |
+| `GARMIN_MAX_RANGE_DAYS` | no | `93` | Largest date range a range tool accepts |
+| `GARMIN_ENV_FILE` | no | unset | Explicit `.env` path |
+| `FASTMCP_HOST`, `FASTMCP_PORT` | no | `127.0.0.1`, `8000` | HTTP bind (set by `scripts/mcp_streamable_http.sh`) |
+| `LIFEOS_OTEL_DISABLE_OTLP` | no | `1` in the scripts | Set `0` to export traces over OTLP |
+
+**Token location.** After the garminconnect 0.3 upgrade the token directory
+holds `garmin_tokens.json`. The directory currently sits on a drive mounted
+without Unix permissions, so the token files are readable by other local
+users; moving it to a Linux filesystem under your home directory with owner-only
+permissions is tracked in #13.
 
 ## Tests
 

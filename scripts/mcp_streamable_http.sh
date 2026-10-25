@@ -3,25 +3,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-WORKSPACE_DIR="$(cd "${PROJECT_DIR}/../.." && pwd)"
 
-if [[ -f "${PROJECT_DIR}/.env" ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source "${PROJECT_DIR}/.env"
-  set +a
-fi
-
-if [[ -f "${WORKSPACE_DIR}/.env" ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source "${WORKSPACE_DIR}/.env"
-  set +a
-fi
+# Configuration (.env, GARMIN_TOKENS_DIR, GARMIN_MAX_RANGE_DAYS) is resolved in
+# one place, src/garmin_mcp/config.py (README "Configuration"). Run from the
+# project directory so that resolution does not depend on the caller's cwd.
+cd "${PROJECT_DIR}"
 
 export PYTHONPATH="${PROJECT_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
-export GARMIN_TOKENS_DIR="${GARMIN_TOKENS_DIR:-config/garmin-mcp/tokens}"
-export GARMIN_MAX_RANGE_DAYS="${GARMIN_MAX_RANGE_DAYS:-93}"
 export LIFEOS_OTEL_DISABLE_OTLP="${LIFEOS_OTEL_DISABLE_OTLP:-1}"
 export FASTMCP_HOST="${FASTMCP_HOST:-127.0.0.1}"
 export FASTMCP_PORT="${FASTMCP_PORT:-8000}"
