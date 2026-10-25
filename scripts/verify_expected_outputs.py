@@ -251,7 +251,7 @@ def ci_on_main(ctx: Ctx) -> Check:
         if not test_workflows:
             return Check("CI passes on latest origin/main", "FAIL", "no test workflow in .github/workflows")
         rc, out = run(["gh", "run", "list", "-R", REPO, "--branch", "main", "--workflow", test_workflows[0],
-                       "--limit", "1", "--json", "conclusion,headSha,workflowName,url"], timeout=60)
+                       "--limit", "1", "--json", "status,conclusion,headSha,workflowName,url"], timeout=60)
         if rc != 0:
             return skip("CI passes on latest origin/main", f"gh unavailable: {tail(out)}")
         runs = json.loads(out or "[]")
@@ -260,6 +260,8 @@ def ci_on_main(ctx: Ctx) -> Check:
         if not runs:
             return Check("CI passes on latest origin/main", "FAIL", "no workflow runs on main")
         last = runs[0]
+        if last.get("headSha") == head_sha and last.get("status") != "completed":
+            return skip("CI passes on latest origin/main", f"CI still running on {head_sha[:7]} ({last.get('url')})")
         good = last.get("conclusion") == "success" and last.get("headSha") == head_sha
         return ok("CI passes on latest origin/main", good,
                   f"{last.get('workflowName')} success on {head_sha[:7]} ({last.get('url')})",
