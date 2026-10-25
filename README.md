@@ -145,3 +145,23 @@ Downstream use:
 - Keep `.env` and `.state/` out of git.
 - Token files are sensitive and should remain local under `config/garmin-mcp/tokens/`.
 - Do not store credentials in IDE MCP config; keep them in `.env`.
+
+## Verifying LifeOS expected outputs
+
+Each GitHub issue on this Track has a LifeOS expected output whose done-when is
+checked by a script, so anyone (agent or owner) can see its status without
+asking:
+
+```bash
+make verify-outputs                                    # all outputs
+python3 scripts/verify_expected_outputs.py --only 8,9  # selected issues
+python3 scripts/verify_expected_outputs.py --offline   # no live service/GitHub/PyPI calls
+python3 scripts/verify_expected_outputs.py --save      # keep a JSON report in .state/expected-outputs/
+```
+
+Each check prints PASS, FAIL or SKIP with evidence. Checks cover tests, files,
+GitHub CI, the running service, and behavior probes run against a fake Garmin
+client. An output is ACCOMPLISHED only when all its checks pass. The script
+only observes: verifying outputs and confirming claims in LifeOS stays with the
+owner. When an issue's done-when changes, update its checks in the script and
+the matching LifeOS done-when together.

@@ -1,7 +1,7 @@
 PYTHON := .venv/bin/python
 PIP := .venv/bin/pip
 
-.PHONY: bootstrap run-cli run-mcp docker-build docker-run
+.PHONY: bootstrap run-cli run-mcp docker-build docker-run verify-outputs
 
 bootstrap:
 	./scripts/bootstrap.sh
@@ -17,3 +17,7 @@ docker-build:
 
 docker-run:
 	docker run -i --rm --env-file .env -e GARMIN_TOKENS_DIR=/data/config/garmin-mcp/tokens -v "$(PWD)/../../../config:/data/config" lifeos.garmin-mcp:local --transport stdio
+
+# Observe whether the Track's LifeOS expected outputs are accomplished (read-only).
+verify-outputs:
+	python3 scripts/verify_expected_outputs.py
