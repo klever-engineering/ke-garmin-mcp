@@ -6,20 +6,12 @@ from typing import Any
 
 import typer
 
+from . import contract
 from .client import (
     GarminAuthError,
-    calories_has_data,
-    calories_row,
-    compact_activity,
-    day_overview_payload,
-    fetch_activities_range,
-    fetch_calories_range,
     fetch_day_snapshot,
-    fetch_sleep_range,
     login,
     parse_date,
-    summarize_calories,
-    summarize_sleep,
     validate_date_range,
 )
 from .config import load_settings
@@ -72,18 +64,19 @@ def day_command(
     parsed_date = parse_date(target_date)
 
     api = RetryingGarmin(login(settings, force_credentials=False))
-    snapshot = fetch_day_snapshot(api, parsed_date)
-    payload = {
-        "calendar_date": snapshot.calendar_date,
-        "summary": snapshot.summary,
-        "sleep": snapshot.sleep,
-        "activities": snapshot.activities,
-    }
     if raw:
-        _print_json(payload)
+        snapshot = fetch_day_snapshot(api, parsed_date)
+        _print_json(
+            {
+                "calendar_date": snapshot.calendar_date,
+                "summary": snapshot.summary,
+                "sleep": snapshot.sleep,
+                "activities": snapshot.activities,
+            }
+        )
         return
 
-    _print_json(day_overview_payload(snapshot))
+    _print_json(contract.day_overview(api, parsed_date))
 
 
 @app.command("today")
@@ -108,17 +101,7 @@ def activities_command(
     settings = load_settings()
     start, end = validate_date_range(start_date, end_date, max_days=settings.max_range_days)
     api = RetryingGarmin(login(settings, force_credentials=False))
-    activities = fetch_activities_range(
-        api, start, end, activity_type=activity_type.strip() or None
-    )
-    _print_json(
-        {
-            "start_date": start.isoformat(),
-            "end_date": end.isoformat(),
-            "count": len(activities),
-            "activities": [compact_activity(activity) for activity in activities],
-        }
-    )
+    _print_json(contract.activities(api, start, end, activity_type))
 
 
 @app.command("sleep-range")
@@ -135,32 +118,7 @@ def sleep_range_command(
     settings = load_settings()
     start, end = validate_date_range(start_date, end_date, max_days=settings.max_range_days)
     api = RetryingGarmin(login(settings, force_credentials=False))
-    rows = fetch_sleep_range(api, start, end)
-
-    output_rows = []
-    for row in rows:
-        has_sleep = isinstance(row.sleep_time_seconds, (int, float)) and row.sleep_time_seconds > 0
-        if not include_empty and not has_sleep:
-            continue
-        output_rows.append(
-            {
-                "calendar_date": row.calendar_date,
-                "sleep_time_seconds": row.sleep_time_seconds,
-                "deep_sleep_seconds": row.deep_sleep_seconds,
-                "light_sleep_seconds": row.light_sleep_seconds,
-                "rem_sleep_seconds": row.rem_sleep_seconds,
-                "awake_sleep_seconds": row.awake_sleep_seconds,
-            }
-        )
-
-    _print_json(
-        {
-            "start_date": start.isoformat(),
-            "end_date": end.isoformat(),
-            "summary": summarize_sleep(rows),
-            "rows": output_rows,
-        }
-    )
+    _print_json(contract.sleep_range(api, start, end, include_empty))
 
 
 @app.command("calories")
@@ -177,18 +135,7 @@ def calories_command(
     settings = load_settings()
     start, end = validate_date_range(start_date, end_date, max_days=settings.max_range_days)
     api = RetryingGarmin(login(settings, force_credentials=False))
-    rows = fetch_calories_range(api, start, end)
-
-    output_rows = [calories_row(row) for row in rows if include_empty or calories_has_data(row)]
-
-    _print_json(
-        {
-            "start_date": start.isoformat(),
-            "end_date": end.isoformat(),
-            "summary": summarize_calories(rows),
-            "rows": output_rows,
-        }
-    )
+    _print_json(contract.calories(api, start, end, include_empty))
 
 
 def main() -> None:

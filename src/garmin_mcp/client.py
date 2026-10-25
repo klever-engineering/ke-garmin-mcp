@@ -272,20 +272,6 @@ def calories_has_data(row: CaloriesDay) -> bool:
     return row.wear_data is not False and bool(row.total_kilocalories or row.active_kilocalories)
 
 
-def calories_row(row: CaloriesDay) -> dict[str, Any]:
-    return {
-        "calendar_date": row.calendar_date,
-        "wear_data": row.wear_data,
-        "estimate": row.estimate,
-        "total_kilocalories": row.total_kilocalories,
-        "active_kilocalories": row.active_kilocalories,
-        "bmr_kilocalories": row.bmr_kilocalories,
-        "wellness_kilocalories": row.wellness_kilocalories,
-        "consumed_kilocalories": row.consumed_kilocalories,
-        "remaining_kilocalories": row.remaining_kilocalories,
-    }
-
-
 def summarize_calories(rows: list[CaloriesDay]) -> dict[str, Any]:
     tracked = [row for row in rows if calories_has_data(row)]
     if not tracked:
@@ -323,18 +309,6 @@ def fetch_day_snapshot(api: Garmin, target_date: date) -> DaySnapshot:
         sleep=sleep if isinstance(sleep, dict) else {},
         activities=activities if isinstance(activities, list) else [],
     )
-
-
-def day_overview_payload(snapshot: DaySnapshot) -> dict[str, Any]:
-    """Shape one day for agents; shared by the CLI and the MCP tool."""
-    return {
-        "calendar_date": snapshot.calendar_date,
-        "wear_data": wear_data_status(snapshot.summary),
-        "daily_summary": compact_daily_summary(snapshot.summary),
-        "calories": compact_calories(snapshot.summary),
-        "sleep": compact_sleep_dto(snapshot.sleep),
-        "workouts": [compact_activity(activity) for activity in snapshot.activities],
-    }
 
 
 def fetch_health_range(api: Garmin, start: date, end: date) -> list[dict[str, Any]]:
@@ -463,8 +437,13 @@ def fetch_sleep_range(api: Garmin, start: date, end: date) -> list[SleepNight]:
     return rows
 
 
+def sleep_has_data(row: SleepNight) -> bool:
+    """A night counts as tracked only with a positive sleep duration."""
+    return isinstance(row.sleep_time_seconds, (int, float)) and row.sleep_time_seconds > 0
+
+
 def summarize_sleep(rows: list[SleepNight]) -> dict[str, Any]:
-    nights = [row for row in rows if isinstance(row.sleep_time_seconds, (int, float)) and row.sleep_time_seconds > 0]
+    nights = [row for row in rows if sleep_has_data(row)]
     if not nights:
         return {
             "tracked_nights": 0,

@@ -5,7 +5,7 @@ from unittest.mock import Mock
 
 os.environ.setdefault("LIFEOS_OTEL_DISABLE_OTLP", "1")
 
-from garmin_mcp import mcp_server
+from garmin_mcp import contract, mcp_server
 from garmin_mcp.client import compact_activity, fetch_health_range, summarize_health_history
 
 
@@ -59,7 +59,7 @@ class HealthHistoryToolTests(unittest.TestCase):
         ]
         with unittest.mock.patch.object(mcp_server, "_get_api", return_value=(
             type("Settings", (), {"max_range_days": 93})(), object()
-        )), unittest.mock.patch.object(mcp_server, "fetch_health_range", return_value=rows):
+        )), unittest.mock.patch.object(contract, "fetch_health_range", return_value=rows):
             result = mcp_server.garmin_get_health_history("2026-10-01", "2026-10-01")
         self.assertTrue(result["ok"])
         self.assertEqual(rows, result["rows"])
@@ -83,7 +83,7 @@ class DayOverviewDefaultDateTests(unittest.TestCase):
         fetch = Mock(side_effect=lambda _api, d: DaySnapshot(d.isoformat(), {}, {}, []))
         with unittest.mock.patch.object(mcp_server, "date", fake_date), \
                 unittest.mock.patch.object(mcp_server, "_get_api", return_value=(None, object())), \
-                unittest.mock.patch.object(mcp_server, "fetch_day_snapshot", fetch):
+                unittest.mock.patch.object(contract, "fetch_day_snapshot", fetch):
             return mcp_server.garmin_get_day_overview(**kwargs)
 
     def test_default_date_resolves_at_call_time_not_import_time(self):
