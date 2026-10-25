@@ -31,7 +31,9 @@ from .client import (
     fetch_activities_range,
     fetch_calories_range,
     fetch_day_snapshot,
+    fetch_health_range,
     fetch_sleep_range,
+    summarize_health_history,
     login,
     parse_date,
     summarize_calories,
@@ -245,6 +247,28 @@ def garmin_get_sleep_range(
                 "summary": summarize_sleep(rows),
                 "rows": table,
             }
+        except Exception as exc:
+            return _handle_known_errors(exc)
+
+
+@mcp.tool(
+    name="garmin_get_health_history",
+    description=(
+        "Get daily resting heart rate and Body Battery charged/drained values over a date range, "
+        "plus coverage and first-week versus last-week averages."
+    ),
+)
+def garmin_get_health_history(start_date: str, end_date: str) -> dict[str, Any]:
+    """Read Garmin daily resting heart rate and Body Battery history (max 93 days)."""
+    with _span("garmin_get_health_history"):
+        try:
+            _set_span_attrs(operation="garmin_get_health_history", start_date=start_date, end_date=end_date)
+            settings, api = _get_api()
+            start, end = validate_date_range(start_date, end_date, max_days=settings.max_range_days)
+            rows = fetch_health_range(api, start, end)
+            summary = summarize_health_history(rows)
+            return {"ok": True, "start_date": start.isoformat(), "end_date": end.isoformat(),
+                    "summary": summary, "rows": rows}
         except Exception as exc:
             return _handle_known_errors(exc)
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from statistics import median
 from typing import Any
 
 from garminconnect import Garmin
@@ -208,6 +209,89 @@ def fetch_day_snapshot(api: Garmin, target_date: date) -> DaySnapshot:
         sleep=sleep if isinstance(sleep, dict) else {},
         activities=activities if isinstance(activities, list) else [],
     )
+
+
+def fetch_health_range(api: Garmin, start: date, end: date) -> list[dict[str, Any]]:
+    """Fetch daily resting HR and Body Battery charged/drained for an inclusive range."""
+    battery_rows = api.get_body_battery(start.isoformat(), end.isoformat())
+    battery_by_date = {
+        row["date"]: row
+        for row in battery_rows
+        if isinstance(row, dict) and isinstance(row.get("date"), str)
+    } if isinstance(battery_rows, list) else {}
+    rows: list[dict[str, Any]] = []
+    cursor = start
+    while cursor <= end:
+        day = cursor.isoformat()
+        summary = api.get_user_summary(day)
+        summary = summary if isinstance(summary, dict) else {}
+        battery = battery_by_date.get(day, {})
+        samples = battery.get("bodyBatteryValuesArray") or []
+        values = [
+            sample[1] for sample in samples
+            if isinstance(sample, (list, tuple)) and len(sample) > 1
+            and isinstance(sample[1], (int, float)) and not isinstance(sample[1], bool)
+        ]
+        rows.append({
+            "calendar_date": day,
+            "resting_heart_rate": summary.get("restingHeartRate"),
+            "body_battery_charged": battery.get("charged"),
+            "body_battery_drained": battery.get("drained"),
+            "body_battery_start": values[0] if values else None,
+            "body_battery_end": values[-1] if values else None,
+        })
+        cursor += timedelta(days=1)
+    return rows
+
+
+def summarize_health_history(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Summarize coverage, levels, and first-week versus last-week averages."""
+    def values(items: list[dict[str, Any]], key: str) -> list[float]:
+        return [item[key] for item in items if isinstance(item.get(key), (int, float))
+                and not isinstance(item.get(key), bool)]
+
+    def average(items: list[dict[str, Any]], key: str) -> float | None:
+        nums = values(items, key)
+        return round(sum(nums) / len(nums), 1) if nums else None
+
+    hr_values = values(rows, "resting_heart_rate")
+    battery_values = values(rows, "body_battery_charged")
+    paired_battery = [row for row in rows
+                      if isinstance(row.get("body_battery_charged"), (int, float))
+                      and isinstance(row.get("body_battery_drained"), (int, float))]
+    first_week, last_week = rows[:7], rows[-7:]
+    summary: dict[str, Any] = {
+        "calendar_days": len(rows),
+        "resting_heart_rate_days": len(hr_values),
+        "resting_heart_rate_average_bpm": average(rows, "resting_heart_rate"),
+        "resting_heart_rate_median_bpm": round(median(hr_values), 1) if hr_values else None,
+        "resting_heart_rate_min_bpm": min(hr_values) if hr_values else None,
+        "resting_heart_rate_max_bpm": max(hr_values) if hr_values else None,
+        "resting_heart_rate_first_week_days": len(values(first_week, "resting_heart_rate")),
+        "resting_heart_rate_last_week_days": len(values(last_week, "resting_heart_rate")),
+        "resting_heart_rate_first_week_average_bpm": average(first_week, "resting_heart_rate"),
+        "resting_heart_rate_last_week_average_bpm": average(last_week, "resting_heart_rate"),
+        "body_battery_days": len(battery_values),
+        "body_battery_first_week_days": len(values(first_week, "body_battery_charged")),
+        "body_battery_last_week_days": len(values(last_week, "body_battery_charged")),
+        "body_battery_charged_average": average(rows, "body_battery_charged"),
+        "body_battery_drained_average": average(rows, "body_battery_drained"),
+        "body_battery_net_negative_days": sum(row["body_battery_charged"] < row["body_battery_drained"]
+                                               for row in paired_battery),
+        "body_battery_net_positive_days": sum(row["body_battery_charged"] > row["body_battery_drained"]
+                                               for row in paired_battery),
+        "body_battery_first_week_charged_average": average(first_week, "body_battery_charged"),
+        "body_battery_last_week_charged_average": average(last_week, "body_battery_charged"),
+    }
+    first_hr = summary["resting_heart_rate_first_week_average_bpm"]
+    last_hr = summary["resting_heart_rate_last_week_average_bpm"]
+    if first_hr is not None and last_hr is not None:
+        summary["resting_heart_rate_weekly_change_bpm"] = round(last_hr - first_hr, 1)
+    first_charge = summary["body_battery_first_week_charged_average"]
+    last_charge = summary["body_battery_last_week_charged_average"]
+    if first_charge is not None and last_charge is not None:
+        summary["body_battery_weekly_charged_change"] = round(last_charge - first_charge, 1)
+    return summary
 
 
 def fetch_activities_range(

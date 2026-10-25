@@ -78,6 +78,7 @@ PYTHONPATH=src python -m garmin_mcp.mcp_server --transport stdio
 
 Exposed tools:
 - `garmin_get_day_overview(target_date)`
+- `garmin_get_health_history(start_date, end_date)` — daily resting heart rate and Body Battery charged/drained/start/end values, coverage, averages, and first-week versus last-week changes (date-range cap: `GARMIN_MAX_RANGE_DAYS`, default 93).
 - `garmin_list_activities(start_date, end_date, activity_type="")`
 - `garmin_get_sleep_range(start_date, end_date, include_empty=false)`
 
