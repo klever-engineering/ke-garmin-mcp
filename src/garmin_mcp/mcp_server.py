@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import os
 from contextlib import nullcontext
+from importlib import metadata
 from datetime import date
 from typing import Any
 
@@ -11,7 +12,7 @@ from garminconnect import (
     GarminConnectConnectionError,
     GarminConnectTooManyRequestsError,
 )
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -27,8 +28,16 @@ from . import contract
 from .client import GarminAuthError, parse_date, validate_date_range
 from .session import GarminSession
 
-mcp = FastMCP(
+def _package_version() -> str:
+    try:
+        return metadata.version("garmin-mcp")
+    except metadata.PackageNotFoundError:
+        return ""
+
+
+mcp = MCPServer(
     name="lifeos.garmin-mcp",
+    version=_package_version(),
     log_level="WARNING",
     instructions=(
         "Query Garmin Connect data for sleep, workouts, and daily metrics. "
@@ -273,11 +282,35 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def http_bind() -> tuple[str, int]:
+    """HTTP bind address. GARMIN_MCP_HOST/PORT; FASTMCP_* accepted for older setups."""
+    host = os.getenv("GARMIN_MCP_HOST") or os.getenv("FASTMCP_HOST") or "127.0.0.1"
+    port = int(os.getenv("GARMIN_MCP_PORT") or os.getenv("FASTMCP_PORT") or "8000")
+    return host, port
+
+
+def build_http_app(transport: str = "streamable-http", host: str = "127.0.0.1"):
+    """The ASGI app served over HTTP (streamable HTTP at /mcp, or SSE)."""
+    if transport == "sse":
+        return mcp.sse_app(host=host)
+    return mcp.streamable_http_app(host=host)
+
+
+def run_http(transport: str) -> None:
+    import uvicorn
+
+    host, port = http_bind()
+    uvicorn.run(build_http_app(transport, host), host=host, port=port, log_level="warning")
+
+
 def main() -> None:
     parser = build_arg_parser()
     args = parser.parse_args()
     with _span("garmin_mcp_server_run"):
-        mcp.run(transport=args.transport)
+        if args.transport == "stdio":
+            mcp.run(transport="stdio")
+        else:
+            run_http(args.transport)
 
 
 if __name__ == "__main__":

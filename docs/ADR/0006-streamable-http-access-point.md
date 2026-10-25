@@ -25,7 +25,7 @@ they are reading: the package was still `0.1.0` with the description
    returns the same payloads); they do not call Garmin Connect directly.
 2. **Transport.** Production runs streamable HTTP at
    `http://127.0.0.1:8000/mcp` (`scripts/mcp_streamable_http.sh`;
-   `FASTMCP_HOST`/`FASTMCP_PORT` override the bind). `stdio`
+   `GARMIN_MCP_HOST`/`GARMIN_MCP_PORT` override the bind). `stdio`
    (`scripts/mcp_stdio.sh`) stays supported for local agent clients. The
    server binds to localhost only; any wider exposure needs the access model
    from #17 first.

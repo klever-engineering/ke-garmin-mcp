@@ -16,8 +16,8 @@ make lock   # re-resolve uv.lock and regenerate requirements.txt
 ```
 
 Current lock: `garminconnect` 0.3.20 (Garmin SSO via `curl_cffi`; no longer
-uses `garth`), `mcp` 1.30.0 (pinned `<2`, see
-[ADR 0005](docs/ADR/0005-dependency-locking-and-mcp-2-deferral.md)), Python 3.12+.
+uses `garth`), `mcp` 2.3.0 (`MCPServer`, see
+[ADR 0009](docs/ADR/0009-mcp-2-migration.md)), Python 3.12+.
 
 Upgrading from `garminconnect` 0.2.x: old garth tokens (`oauth1_token.json`,
 `oauth2_token.json`) cannot be read. Run `lifeos.garmin-cli login` once; it
@@ -56,7 +56,7 @@ Settings are read once per server process; restart the service after changes
 | `GARMIN_TOKENS_DIR` | no | `~/.config/lifeos/garmin-mcp/tokens` (`$XDG_CONFIG_HOME/lifeos/garmin-mcp/tokens` when set) | Token directory; relative paths resolve from the workspace root (the folder containing `config/` and `repositories/`) |
 | `GARMIN_MAX_RANGE_DAYS` | no | `93` | Largest date range a range tool accepts |
 | `GARMIN_ENV_FILE` | no | unset | Explicit `.env` path |
-| `FASTMCP_HOST`, `FASTMCP_PORT` | no | `127.0.0.1`, `8000` | HTTP bind (set by `scripts/mcp_streamable_http.sh`) |
+| `GARMIN_MCP_HOST`, `GARMIN_MCP_PORT` | no | `127.0.0.1`, `8000` | HTTP bind; the older `FASTMCP_HOST`/`FASTMCP_PORT` names still work |
 | `LIFEOS_OTEL_DISABLE_OTLP` | no | `1` in the scripts | Set `0` to export traces over OTLP |
 
 **Token location** ([ADR 0008](docs/ADR/0008-owner-only-token-location.md)).
@@ -268,7 +268,7 @@ authentication yet (#17):
 
 ```bash
 docker run --rm --user "$(id -u):$(id -g)" -p 127.0.0.1:8000:8000 \
-  --env-file .env -e FASTMCP_HOST=0.0.0.0 -e FASTMCP_PORT=8000 \
+  --env-file .env -e GARMIN_MCP_HOST=0.0.0.0 -e GARMIN_MCP_PORT=8000 \
   -e GARMIN_TOKENS_DIR=/data/tokens \
   -v "$HOME/.config/lifeos/garmin-mcp/tokens:/data/tokens" \
   lifeos.garmin-mcp:local --transport streamable-http

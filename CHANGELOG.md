@@ -13,6 +13,9 @@ This project follows semantic versioning on its response contract
   filesystem ignores modes (ADR 0008). Set `GARMIN_TOKENS_DIR` to keep a
   custom location.
 - Docker mounts the token directory at `/data/tokens` and runs as the host user.
+- `mcp` 2.3.0 (`MCPServer`, ADR 0009). Tools and payloads are unchanged.
+  The HTTP bind is now read from `GARMIN_MCP_HOST`/`GARMIN_MCP_PORT`, and
+  `FASTMCP_HOST`/`FASTMCP_PORT` still work.
 
 ## 0.2.0 - 2026-10-25
 

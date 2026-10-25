@@ -1,6 +1,6 @@
 # ADR 0005: Dependency Locking and Deferring mcp 2.x
 
-- Status: Accepted
+- Status: Accepted; decision 3 (defer mcp 2.x) superseded by ADR 0009 on 2026-10-25
 - Date: 2026-10-25
 - Issue: #12
 

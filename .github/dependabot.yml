@@ -7,7 +7,7 @@ updates:
     schedule:
       interval: "weekly"
     ignore:
-      # mcp 2.x is a code migration (FastMCP -> MCPServer), tracked in #22.
+      # A new mcp major version is a code migration; do it as its own issue.
       - dependency-name: "mcp"
         update-types: ["version-update:semver-major"]
     groups:

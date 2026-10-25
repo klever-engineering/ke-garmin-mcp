@@ -9,8 +9,9 @@ requires-python = ">=3.12"
 # in uv.lock; requirements.txt is generated from it. See docs/ADR/0005.
 dependencies = [
   "garminconnect>=0.3.20,<0.4",
-  # mcp 2.x renames FastMCP to MCPServer; migration tracked separately (ADR 0005).
-  "mcp>=1.30.0,<2",
+  # mcp 2.x: MCPServer API (ADR 0009). uvicorn is used directly to serve HTTP.
+  "mcp>=2.3.0,<3",
+  "uvicorn>=0.31.1",
   "opentelemetry-api>=1.45.1,<2",
   "opentelemetry-exporter-otlp-proto-http>=1.45.1,<2",
   "opentelemetry-sdk>=1.45.1,<2",
