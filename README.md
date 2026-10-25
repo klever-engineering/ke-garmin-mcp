@@ -93,6 +93,26 @@ Exposed tools:
 - `garmin_list_activities(start_date, end_date, activity_type="")`
 - `garmin_get_sleep_range(start_date, end_date, include_empty=false)`
 
+## No-wear day semantics
+
+Observed live on 2026-10-25 by scanning daily summaries for 2026-07-25 to
+2026-10-24 (92 days) and one date before any device (2012-01-15):
+
+| Case | Example | steps | distance_meters | active_kilocalories | total_kilocalories | resting_heart_rate | sleep |
+|---|---|---|---|---|---|---|---|
+| Worn day | 2026-10-24 | 15615 | 12282 | 821 | 2635 | 53 | 26520 s |
+| **No-wear day** (6 of 92 days: 08-19, 09-18, 09-25, 09-29, 09-30, 10-13) | 2026-08-19 | **null** | **0** (null on 09-30) | **0** | **2047** (BMR estimate only) | null | null |
+| Before any device | 2012-01-15 | null | null | null | null | null | null |
+
+Garmin fills a no-wear day with zeros and a profile-based BMR estimate rather
+than nulls. The raw summary identifies it: `totalSteps` is null,
+`averageStressLevel` is -1, and `sedentarySeconds` is 86400. The MCP currently
+passes those values through, so on a no-wear day `distance_meters: 0`,
+`active_kilocalories: 0` and `total_kilocalories: 2047` are **not**
+measurements. Until this is normalized, treat `steps: null` as "no wear data"
+for the whole day. Dates with no Garmin record at all return null for every
+field (covered by `tests/test_contract.py`).
+
 ## Docker
 
 Build:
